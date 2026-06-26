@@ -1,0 +1,27 @@
+name: CrazyWork
+options:
+  bundleIdPrefix: com.dmbritton
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  ChallengeCore:
+    path: ../ChallengeCore
+targets:
+  CrazyWork:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: ChallengeCore
+    info:
+      path: Sources/App/Info.plist
+      properties:
+        NSCameraUsageDescription: "CrazyWork uses the camera to count your reps and check your form."
+        UILaunchScreen: {}
+  CrazyWorkTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: CrazyWork
+      - package: ChallengeCore
