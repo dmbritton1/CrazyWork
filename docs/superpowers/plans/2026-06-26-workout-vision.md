@@ -1,10 +1,10 @@
-# WorkoutVision Implementation Plan
+# CrazyWork Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a native iOS workout app that uses the camera + Vision pose detection to count reps and score form for pushups and squats, on top of a generalized, protocol-based `ChallengeCore` engine ported from the WakeupCall repo.
 
-**Architecture:** A pure Swift package (`ChallengeCore`) turns a stream of `PoseFrame`s into `RepEvent`s through per-exercise `ExerciseAnalyzer` conformers that share angle/hysteresis/confidence machinery. A separate iOS app target (`WorkoutVision`) captures camera frames (AVFoundation), maps Vision pose observations into `PoseFrame`s, drives a `SessionCoordinator` that swaps analyzers per exercise, and persists per-set aggregates with SwiftData. The engine never imports UI, AVFoundation, Vision, or SwiftData.
+**Architecture:** A pure Swift package (`ChallengeCore`) turns a stream of `PoseFrame`s into `RepEvent`s through per-exercise `ExerciseAnalyzer` conformers that share angle/hysteresis/confidence machinery. A separate iOS app target (`CrazyWork`) captures camera frames (AVFoundation), maps Vision pose observations into `PoseFrame`s, drives a `SessionCoordinator` that swaps analyzers per exercise, and persists per-set aggregates with SwiftData. The engine never imports UI, AVFoundation, Vision, or SwiftData.
 
 **Tech Stack:** Swift 6, Swift Package Manager (engine), SwiftUI, Vision, AVFoundation, SwiftData, XcodeGen.
 
@@ -57,13 +57,13 @@ ChallengeCore/
     ExerciseRegistryTests.swift
 ```
 
-### Phase 2 — `WorkoutVision` app target
+### Phase 2 — `CrazyWork` app target
 
 ```
-WorkoutVision/
+CrazyWork/
   project.yml                          # XcodeGen source of truth
   Sources/
-    App/WorkoutVisionApp.swift
+    App/CrazyWorkApp.swift
     Capture/CameraSession.swift        # AVFoundation capture
     Capture/VisionPoseMapper.swift     # VNHumanBodyPoseObservation -> PoseFrame
     Capture/PosePipeline.swift         # camera -> mapper -> analyzer glue
@@ -1049,21 +1049,21 @@ git commit -m "feat: add ExerciseRegistry"
 
 ---
 
-# PHASE 2 — The `WorkoutVision` app
+# PHASE 2 — The `CrazyWork` app
 
 This phase wires the engine into an iOS app. Pure logic (coordinator, persistence, Vision mapping) is test-driven; camera capture and SwiftUI views are concrete code verified on device. The app depends on the `ChallengeCore` package from Phase 1 via a local path.
 
 ## Task 11: Scaffold the app with XcodeGen
 
 **Files:**
-- Create: `WorkoutVision/project.yml`
-- Create: `WorkoutVision/Sources/App/WorkoutVisionApp.swift`
+- Create: `CrazyWork/project.yml`
+- Create: `CrazyWork/Sources/App/CrazyWorkApp.swift`
 
 - [ ] **Step 1: Write the XcodeGen spec**
 
-`WorkoutVision/project.yml`:
+`CrazyWork/project.yml`:
 ```yaml
-name: WorkoutVision
+name: CrazyWork
 options:
   bundleIdPrefix: com.dmbritton
   deploymentTarget:
@@ -1072,7 +1072,7 @@ packages:
   ChallengeCore:
     path: ../ChallengeCore
 targets:
-  WorkoutVision:
+  CrazyWork:
     type: application
     platform: iOS
     sources: [Sources]
@@ -1081,26 +1081,26 @@ targets:
     info:
       path: Sources/App/Info.plist
       properties:
-        NSCameraUsageDescription: "WorkoutVision uses the camera to count your reps and check your form."
+        NSCameraUsageDescription: "CrazyWork uses the camera to count your reps and check your form."
         UILaunchScreen: {}
-  WorkoutVisionTests:
+  CrazyWorkTests:
     type: bundle.unit-test
     platform: iOS
     sources: [Tests]
     dependencies:
-      - target: WorkoutVision
+      - target: CrazyWork
       - package: ChallengeCore
 ```
 
 - [ ] **Step 2: Add the app entry point**
 
-`WorkoutVision/Sources/App/WorkoutVisionApp.swift`:
+`CrazyWork/Sources/App/CrazyWorkApp.swift`:
 ```swift
 import SwiftUI
 import SwiftData
 
 @main
-struct WorkoutVisionApp: App {
+struct CrazyWorkApp: App {
     var body: some Scene {
         WindowGroup {
             BuildWorkoutView()
@@ -1112,30 +1112,30 @@ struct WorkoutVisionApp: App {
 
 - [ ] **Step 3: Generate and verify the project**
 
-Run: `cd WorkoutVision && xcodegen generate`
-Expected: `Created project at WorkoutVision.xcodeproj`. (This step won't fully build until later tasks add the referenced views/models — that's expected; the goal here is a valid project file.)
+Run: `cd CrazyWork && xcodegen generate`
+Expected: `Created project at CrazyWork.xcodeproj`. (This step won't fully build until later tasks add the referenced views/models — that's expected; the goal here is a valid project file.)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add WorkoutVision/project.yml WorkoutVision/Sources/App
-git commit -m "chore: scaffold WorkoutVision app with XcodeGen"
+git add CrazyWork/project.yml CrazyWork/Sources/App
+git commit -m "chore: scaffold CrazyWork app with XcodeGen"
 ```
 
 ## Task 12: SwiftData models
 
 **Files:**
-- Create: `WorkoutVision/Sources/Persistence/WorkoutSession.swift`
-- Create: `WorkoutVision/Sources/Persistence/ExerciseSet.swift`
-- Test: `WorkoutVision/Tests/PersistenceTests.swift`
+- Create: `CrazyWork/Sources/Persistence/WorkoutSession.swift`
+- Create: `CrazyWork/Sources/Persistence/ExerciseSet.swift`
+- Test: `CrazyWork/Tests/PersistenceTests.swift`
 
 - [ ] **Step 1: Write the failing test**
 
-`WorkoutVision/Tests/PersistenceTests.swift`:
+`CrazyWork/Tests/PersistenceTests.swift`:
 ```swift
 import XCTest
 import SwiftData
-@testable import WorkoutVision
+@testable import CrazyWork
 
 final class PersistenceTests: XCTestCase {
     private func inMemoryContext() throws -> ModelContext {
@@ -1168,12 +1168,12 @@ final class PersistenceTests: XCTestCase {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd WorkoutVision && xcodebuild test -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:WorkoutVisionTests/PersistenceTests`
+Run: `cd CrazyWork && xcodebuild test -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:CrazyWorkTests/PersistenceTests`
 Expected: FAIL — models not defined / build error.
 
 - [ ] **Step 3: Implement the models**
 
-`WorkoutVision/Sources/Persistence/ExerciseSet.swift`:
+`CrazyWork/Sources/Persistence/ExerciseSet.swift`:
 ```swift
 import Foundation
 import SwiftData
@@ -1199,7 +1199,7 @@ final class ExerciseSet {
 }
 ```
 
-`WorkoutVision/Sources/Persistence/WorkoutSession.swift`:
+`CrazyWork/Sources/Persistence/WorkoutSession.swift`:
 ```swift
 import Foundation
 import SwiftData
@@ -1228,13 +1228,13 @@ final class WorkoutSession {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd WorkoutVision && xcodebuild test -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:WorkoutVisionTests/PersistenceTests`
+Run: `cd CrazyWork && xcodebuild test -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:CrazyWorkTests/PersistenceTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add WorkoutVision/Sources/Persistence WorkoutVision/Tests/PersistenceTests.swift
+git add CrazyWork/Sources/Persistence CrazyWork/Tests/PersistenceTests.swift
 git commit -m "feat: add SwiftData WorkoutSession and ExerciseSet models"
 ```
 
@@ -1243,17 +1243,17 @@ git commit -m "feat: add SwiftData WorkoutSession and ExerciseSet models"
 The coordinator owns workout state: an ordered list of `PlannedSet`s, the current index, the active analyzer, the live rep count, and live form findings. It exposes a `feed(_:)` entry point that forwards frames to the active analyzer and accumulates results. It is UI-agnostic and testable with a fake frame stream.
 
 **Files:**
-- Create: `WorkoutVision/Sources/Session/PlannedSet.swift`
-- Create: `WorkoutVision/Sources/Session/SessionCoordinator.swift`
-- Test: `WorkoutVision/Tests/SessionCoordinatorTests.swift`
+- Create: `CrazyWork/Sources/Session/PlannedSet.swift`
+- Create: `CrazyWork/Sources/Session/SessionCoordinator.swift`
+- Test: `CrazyWork/Tests/SessionCoordinatorTests.swift`
 
 - [ ] **Step 1: Write the failing test**
 
-`WorkoutVision/Tests/SessionCoordinatorTests.swift`:
+`CrazyWork/Tests/SessionCoordinatorTests.swift`:
 ```swift
 import XCTest
 import ChallengeCore
-@testable import WorkoutVision
+@testable import CrazyWork
 
 final class SessionCoordinatorTests: XCTestCase {
     /// One squat rep: down then up, repeated `count` times.
@@ -1296,7 +1296,7 @@ final class SessionCoordinatorTests: XCTestCase {
 }
 ```
 
-Also create the test shim `WorkoutVision/Tests/PoseFrameBuilderShim.swift`:
+Also create the test shim `CrazyWork/Tests/PoseFrameBuilderShim.swift`:
 ```swift
 import Foundation
 import ChallengeCore
@@ -1320,12 +1320,12 @@ struct PoseFrameBuilderShim {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd WorkoutVision && xcodebuild test -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:WorkoutVisionTests/SessionCoordinatorTests`
+Run: `cd CrazyWork && xcodebuild test -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:CrazyWorkTests/SessionCoordinatorTests`
 Expected: FAIL — `SessionCoordinator` / `PlannedSet` not defined.
 
 - [ ] **Step 3: Implement PlannedSet and SessionCoordinator**
 
-`WorkoutVision/Sources/Session/PlannedSet.swift`:
+`CrazyWork/Sources/Session/PlannedSet.swift`:
 ```swift
 import Foundation
 
@@ -1336,7 +1336,7 @@ struct PlannedSet: Identifiable, Equatable {
 }
 ```
 
-`WorkoutVision/Sources/Session/SessionCoordinator.swift`:
+`CrazyWork/Sources/Session/SessionCoordinator.swift`:
 ```swift
 import Foundation
 import Observation
@@ -1436,13 +1436,13 @@ final class SessionCoordinator {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd WorkoutVision && xcodebuild test -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:WorkoutVisionTests/SessionCoordinatorTests`
+Run: `cd CrazyWork && xcodebuild test -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:CrazyWorkTests/SessionCoordinatorTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add WorkoutVision/Sources/Session WorkoutVision/Tests/SessionCoordinatorTests.swift WorkoutVision/Tests/PoseFrameBuilderShim.swift
+git add CrazyWork/Sources/Session CrazyWork/Tests/SessionCoordinatorTests.swift CrazyWork/Tests/PoseFrameBuilderShim.swift
 git commit -m "feat: add SessionCoordinator workout state machine"
 ```
 
@@ -1451,17 +1451,17 @@ git commit -m "feat: add SessionCoordinator workout state machine"
 Maps `VNHumanBodyPoseObservation` joint points into the engine's `PoseFrame`. This is the only place Vision's coordinate space and joint names touch the engine's pure types. Test the mapping table with a stubbed observation-like input.
 
 **Files:**
-- Create: `WorkoutVision/Sources/Capture/VisionPoseMapper.swift`
-- Test: `WorkoutVision/Tests/VisionPoseMapperTests.swift`
+- Create: `CrazyWork/Sources/Capture/VisionPoseMapper.swift`
+- Test: `CrazyWork/Tests/VisionPoseMapperTests.swift`
 
 - [ ] **Step 1: Write the failing test**
 
-`WorkoutVision/Tests/VisionPoseMapperTests.swift`:
+`CrazyWork/Tests/VisionPoseMapperTests.swift`:
 ```swift
 import XCTest
 import CoreGraphics
 import ChallengeCore
-@testable import WorkoutVision
+@testable import CrazyWork
 
 final class VisionPoseMapperTests: XCTestCase {
     func testMapsRecognizedPointsToPoseFrame() {
@@ -1482,12 +1482,12 @@ final class VisionPoseMapperTests: XCTestCase {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd WorkoutVision && xcodebuild test -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:WorkoutVisionTests/VisionPoseMapperTests`
+Run: `cd CrazyWork && xcodebuild test -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:CrazyWorkTests/VisionPoseMapperTests`
 Expected: FAIL — type not defined.
 
 - [ ] **Step 3: Implement the mapper**
 
-`WorkoutVision/Sources/Capture/VisionPoseMapper.swift`:
+`CrazyWork/Sources/Capture/VisionPoseMapper.swift`:
 ```swift
 import Foundation
 import CoreGraphics
@@ -1530,13 +1530,13 @@ enum VisionPoseMapper {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd WorkoutVision && xcodebuild test -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:WorkoutVisionTests/VisionPoseMapperTests`
+Run: `cd CrazyWork && xcodebuild test -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:CrazyWorkTests/VisionPoseMapperTests`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add WorkoutVision/Sources/Capture/VisionPoseMapper.swift WorkoutVision/Tests/VisionPoseMapperTests.swift
+git add CrazyWork/Sources/Capture/VisionPoseMapper.swift CrazyWork/Tests/VisionPoseMapperTests.swift
 git commit -m "feat: add VisionPoseMapper"
 ```
 
@@ -1545,12 +1545,12 @@ git commit -m "feat: add VisionPoseMapper"
 Camera capture and the Vision request live here. This is device-verified (the simulator has no camera). Crib the capture setup from WakeupCall's existing camera code.
 
 **Files:**
-- Create: `WorkoutVision/Sources/Capture/CameraSession.swift`
-- Create: `WorkoutVision/Sources/Capture/PosePipeline.swift`
+- Create: `CrazyWork/Sources/Capture/CameraSession.swift`
+- Create: `CrazyWork/Sources/Capture/PosePipeline.swift`
 
 - [ ] **Step 1: Implement CameraSession**
 
-`WorkoutVision/Sources/Capture/CameraSession.swift`:
+`CrazyWork/Sources/Capture/CameraSession.swift`:
 ```swift
 import AVFoundation
 
@@ -1587,7 +1587,7 @@ final class CameraSession: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
 
 - [ ] **Step 2: Implement PosePipeline (glue: buffer -> Vision -> mapper -> coordinator)**
 
-`WorkoutVision/Sources/Capture/PosePipeline.swift`:
+`CrazyWork/Sources/Capture/PosePipeline.swift`:
 ```swift
 import AVFoundation
 import Vision
@@ -1625,13 +1625,13 @@ final class PosePipeline {
 
 - [ ] **Step 3: Verify the app builds**
 
-Run: `cd WorkoutVision && xcodebuild build -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15'`
+Run: `cd CrazyWork && xcodebuild build -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15'`
 Expected: `BUILD SUCCEEDED`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add WorkoutVision/Sources/Capture/CameraSession.swift WorkoutVision/Sources/Capture/PosePipeline.swift
+git add CrazyWork/Sources/Capture/CameraSession.swift CrazyWork/Sources/Capture/PosePipeline.swift
 git commit -m "feat: add camera capture and pose pipeline"
 ```
 
@@ -1640,11 +1640,11 @@ git commit -m "feat: add camera capture and pose pipeline"
 Spec §8 requires a clear explainer + Settings deep-link when camera access is denied, not a silent failure.
 
 **Files:**
-- Create: `WorkoutVision/Sources/Capture/CameraAuthorization.swift`
+- Create: `CrazyWork/Sources/Capture/CameraAuthorization.swift`
 
 - [ ] **Step 1: Implement the authorization helper**
 
-`WorkoutVision/Sources/Capture/CameraAuthorization.swift`:
+`CrazyWork/Sources/Capture/CameraAuthorization.swift`:
 ```swift
 import AVFoundation
 
@@ -1668,13 +1668,13 @@ enum CameraAuthorization {
 
 - [ ] **Step 2: Verify build**
 
-Run: `cd WorkoutVision && xcodebuild build -scheme WorkoutVision -destination 'platform=iOS Simulator,name=iPhone 15'`
+Run: `cd CrazyWork && xcodebuild build -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 15'`
 Expected: `BUILD SUCCEEDED`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add WorkoutVision/Sources/Capture/CameraAuthorization.swift
+git add CrazyWork/Sources/Capture/CameraAuthorization.swift
 git commit -m "feat: add camera authorization helper"
 ```
 
@@ -1683,15 +1683,15 @@ git commit -m "feat: add camera authorization helper"
 These are SwiftUI views verified on device. Each is concrete; wire them to the coordinator and SwiftData.
 
 **Files:**
-- Create: `WorkoutVision/Sources/Views/BuildWorkoutView.swift`
-- Create: `WorkoutVision/Sources/Views/LiveWorkoutView.swift`
-- Create: `WorkoutVision/Sources/Views/SkeletonOverlay.swift`
-- Create: `WorkoutVision/Sources/Views/SummaryView.swift`
-- Create: `WorkoutVision/Sources/Views/HistoryView.swift`
+- Create: `CrazyWork/Sources/Views/BuildWorkoutView.swift`
+- Create: `CrazyWork/Sources/Views/LiveWorkoutView.swift`
+- Create: `CrazyWork/Sources/Views/SkeletonOverlay.swift`
+- Create: `CrazyWork/Sources/Views/SummaryView.swift`
+- Create: `CrazyWork/Sources/Views/HistoryView.swift`
 
 - [ ] **Step 1: BuildWorkoutView (pick exercises + targets, then start)**
 
-`WorkoutVision/Sources/Views/BuildWorkoutView.swift`:
+`CrazyWork/Sources/Views/BuildWorkoutView.swift`:
 ```swift
 import SwiftUI
 import ChallengeCore
@@ -1739,7 +1739,7 @@ struct BuildWorkoutView: View {
 
 - [ ] **Step 2: SkeletonOverlay (draw joints over the preview)**
 
-`WorkoutVision/Sources/Views/SkeletonOverlay.swift`:
+`CrazyWork/Sources/Views/SkeletonOverlay.swift`:
 ```swift
 import SwiftUI
 import ChallengeCore
@@ -1767,7 +1767,7 @@ struct SkeletonOverlay: View {
 
 - [ ] **Step 3: LiveWorkoutView (camera + counter + cues + rest)**
 
-`WorkoutVision/Sources/Views/LiveWorkoutView.swift`:
+`CrazyWork/Sources/Views/LiveWorkoutView.swift`:
 ```swift
 import SwiftUI
 import SwiftData
@@ -1797,7 +1797,7 @@ struct LiveWorkoutView: View {
                 if cameraDenied {
                     VStack(spacing: 12) {
                         Text("Camera access is off").font(.title2).foregroundStyle(.white)
-                        Text("WorkoutVision needs the camera to count your reps.").foregroundStyle(.secondary)
+                        Text("CrazyWork needs the camera to count your reps.").foregroundStyle(.secondary)
                         Button("Open Settings") {
                             if let url = URL(string: UIApplication.openSettingsURLString) {
                                 UIApplication.shared.open(url)
@@ -1879,7 +1879,7 @@ struct LiveWorkoutView: View {
 
 - [ ] **Step 4: SummaryView**
 
-`WorkoutVision/Sources/Views/SummaryView.swift`:
+`CrazyWork/Sources/Views/SummaryView.swift`:
 ```swift
 import SwiftUI
 
@@ -1903,7 +1903,7 @@ struct SummaryView: View {
 
 - [ ] **Step 5: HistoryView**
 
-`WorkoutVision/Sources/Views/HistoryView.swift`:
+`CrazyWork/Sources/Views/HistoryView.swift`:
 ```swift
 import SwiftUI
 import SwiftData
@@ -1926,13 +1926,13 @@ struct HistoryView: View {
 
 - [ ] **Step 6: Build and verify on device**
 
-Run: `cd WorkoutVision && xcodebuild build -scheme WorkoutVision -destination 'generic/platform=iOS'`
+Run: `cd CrazyWork && xcodebuild build -scheme CrazyWork -destination 'generic/platform=iOS'`
 Expected: `BUILD SUCCEEDED`. Then run on a physical device (camera required): build a workout with squats, prop the phone up, perform reps, confirm: live count increments, "go deeper" appears on shallow reps, set advances at target, summary shows, and the session appears in History.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add WorkoutVision/Sources/Views
+git add CrazyWork/Sources/Views
 git commit -m "feat: add app screens (build, live, summary, history)"
 ```
 
