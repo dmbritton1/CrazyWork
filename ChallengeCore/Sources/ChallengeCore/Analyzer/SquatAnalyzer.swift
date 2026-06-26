@@ -31,6 +31,7 @@ public struct SquatAnalyzer: ExerciseAnalyzer {
             requiredJoints: [.leftHip, .leftKnee, .leftAnkle],
             minConfidence: minConfidence
         )
+        guard status == .tracking else { return [] }
 
         minKneeThisRep = min(minKneeThisRep, knee)
         if let lean = torsoLean(frame) {

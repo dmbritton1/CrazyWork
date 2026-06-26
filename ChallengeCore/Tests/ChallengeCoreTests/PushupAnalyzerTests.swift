@@ -4,18 +4,18 @@ import XCTest
 final class PushupAnalyzerTests: XCTestCase {
     /// Builds a frame whose left-elbow angle equals `elbow` degrees and whose
     /// back (shoulder-hip-ankle) is straight unless `backAngle` is given.
-    private func frame(elbow: Double, backAngle: Double = 180, t: TimeInterval) -> PoseFrame {
+    private func frame(elbow: Double, backAngle: Double = 180, t: TimeInterval, confidence: Double = 1) -> PoseFrame {
         var b = PoseFrameBuilder()
         b.timestamp = t
         // Place elbow at origin; shoulder straight up; wrist at `elbow` degrees from shoulder.
-        b.set(.leftElbow, 0, 0)
-        b.set(.leftShoulder, 0, 1)
+        b.set(.leftElbow, 0, 0, confidence: confidence)
+        b.set(.leftShoulder, 0, 1, confidence: confidence)
         let rad = elbow * .pi / 180
-        b.set(.leftWrist, sin(rad), cos(rad))
+        b.set(.leftWrist, sin(rad), cos(rad), confidence: confidence)
         // Back line: shoulder-hip-ankle. Hip at origin of that sub-angle.
-        b.set(.leftHip, 5, 0)
+        b.set(.leftHip, 5, 0, confidence: confidence)
         let backRad = backAngle * .pi / 180
-        b.set(.leftAnkle, 5 + sin(backRad), -cos(backRad)) // shoulder already set above at (0,1)
+        b.set(.leftAnkle, 5 + sin(backRad), -cos(backRad), confidence: confidence) // shoulder already set above at (0,1)
         return b.build()
     }
 
@@ -49,5 +49,17 @@ final class PushupAnalyzerTests: XCTestCase {
 
     func testInfoIdIsPushup() {
         XCTAssertEqual(PushupAnalyzer().info.id, "pushup")
+    }
+
+    func testLowConfidenceFramesDoNotCount() {
+        var a = PushupAnalyzer()
+        let frames = [
+            frame(elbow: 170, t: 0.0, confidence: 0.1),
+            frame(elbow: 70, t: 0.5, confidence: 0.1),
+            frame(elbow: 170, t: 1.0, confidence: 0.1),
+        ]
+        let events = feed(&a, frames)
+        XCTAssertEqual(events.count, 0)
+        XCTAssertEqual(a.status, .lowConfidence)
     }
 }

@@ -3,16 +3,16 @@ import XCTest
 
 final class SquatAnalyzerTests: XCTestCase {
     /// Frame whose knee angle equals `knee` degrees; torso vertical by default.
-    private func frame(knee: Double, torsoLeanDeg: Double = 0, t: TimeInterval) -> PoseFrame {
+    private func frame(knee: Double, torsoLeanDeg: Double = 0, t: TimeInterval, confidence: Double = 1) -> PoseFrame {
         var b = PoseFrameBuilder()
         b.timestamp = t
-        b.set(.leftKnee, 0, 0)
-        b.set(.leftHip, 0, 1) // hip straight above knee
+        b.set(.leftKnee, 0, 0, confidence: confidence)
+        b.set(.leftHip, 0, 1, confidence: confidence) // hip straight above knee
         let rad = knee * .pi / 180
-        b.set(.leftAnkle, sin(rad), cos(rad)) // ankle at `knee` degrees from hip
+        b.set(.leftAnkle, sin(rad), cos(rad), confidence: confidence) // ankle at `knee` degrees from hip
         // Torso: shoulder relative to hip, leaned `torsoLeanDeg` from vertical.
         let lean = torsoLeanDeg * .pi / 180
-        b.set(.leftShoulder, sin(lean), 1 + cos(lean))
+        b.set(.leftShoulder, sin(lean), 1 + cos(lean), confidence: confidence)
         return b.build()
     }
 
@@ -46,5 +46,17 @@ final class SquatAnalyzerTests: XCTestCase {
 
     func testInfoIdIsSquat() {
         XCTAssertEqual(SquatAnalyzer().info.id, "squat")
+    }
+
+    func testLowConfidenceFramesDoNotCount() {
+        var a = SquatAnalyzer()
+        let frames = [
+            frame(knee: 170, t: 0.0, confidence: 0.1),
+            frame(knee: 80, t: 0.6, confidence: 0.1),
+            frame(knee: 170, t: 1.2, confidence: 0.1),
+        ]
+        let events = feed(&a, frames)
+        XCTAssertEqual(events.count, 0)
+        XCTAssertEqual(a.status, .lowConfidence)
     }
 }

@@ -32,6 +32,7 @@ public struct PushupAnalyzer: ExerciseAnalyzer {
             requiredJoints: [.leftShoulder, .leftElbow, .leftWrist],
             minConfidence: minConfidence
         )
+        guard status == .tracking else { return [] }
 
         minElbowThisRep = min(minElbowThisRep, elbow)
         if let back = backAngle(frame) {
