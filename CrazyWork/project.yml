@@ -10,6 +10,9 @@ targets:
   CrazyWork:
     type: application
     platform: iOS
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
     sources: [Sources]
     dependencies:
       - package: ChallengeCore
