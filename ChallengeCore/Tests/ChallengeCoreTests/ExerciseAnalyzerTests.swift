@@ -36,13 +36,16 @@ struct ExerciseAnalyzerTests {
         ])
     }
 
-    /// Side-view plank frame: body horizontal along x; hip height controls sag/pike.
+    /// Side-view plank frame: body horizontal along x, propped on the arms
+    /// (elbow/wrist below the shoulder); hip height controls sag/pike.
     private func plankFrame(hipY: Double, t: TimeInterval, confidence: Double = 0.9) -> PoseFrame {
         func jp(_ x: Double, _ y: Double) -> JointPoint {
             JointPoint(location: Point2D(x: x, y: y), confidence: confidence)
         }
         return PoseFrame(timestamp: t, joints: [
             .leftShoulder: jp(0, 1), .rightShoulder: jp(0, 1),
+            .leftElbow: jp(0, 0.4), .rightElbow: jp(0, 0.4),
+            .leftWrist: jp(0.3, 0.4), .rightWrist: jp(0.3, 0.4),
             .leftHip: jp(1, hipY), .rightHip: jp(1, hipY),
             .leftAnkle: jp(2, 1), .rightAnkle: jp(2, 1),
         ])
@@ -184,9 +187,11 @@ struct ExerciseAnalyzerTests {
             func jp(_ x: Double, _ y: Double) -> JointPoint {
                 JointPoint(location: Point2D(x: x, y: y), confidence: 0.9)
             }
-            // Only shoulders + hips, held horizontal — feet out of frame.
+            // Shoulders, propping arms, and hips — feet out of frame.
             return PoseFrame(timestamp: t, joints: [
                 .leftShoulder: jp(0, 1), .rightShoulder: jp(0, 1),
+                .leftElbow: jp(0, 0.4), .rightElbow: jp(0, 0.4),
+                .leftWrist: jp(0.3, 0.4), .rightWrist: jp(0.3, 0.4),
                 .leftHip: jp(1, 1), .rightHip: jp(1, 1),
             ])
         }
@@ -195,6 +200,28 @@ struct ExerciseAnalyzerTests {
         for _ in 0..<6 { last = a.process(torsoOnly(t: t)); t += 0.1 }
         #expect(a.progress > 0)
         #expect(last?.poseVisible == true)
+    }
+
+    @Test("PlankAnalyzer does not count lying flat on the floor (arms not propping)")
+    func plankLyingDown() {
+        var a = PlankAnalyzer()
+        func lyingFrame(t: TimeInterval) -> PoseFrame {
+            func jp(_ x: Double, _ y: Double) -> JointPoint {
+                JointPoint(location: Point2D(x: x, y: y), confidence: 0.9)
+            }
+            // Horizontal and straight, but arms lie along the floor (at shoulder
+            // height) — nothing is propping the torso up. Not a plank.
+            return PoseFrame(timestamp: t, joints: [
+                .leftShoulder: jp(0, 1), .rightShoulder: jp(0, 1),
+                .leftElbow: jp(0.3, 1), .rightElbow: jp(0.3, 1),
+                .leftWrist: jp(0.6, 1), .rightWrist: jp(0.6, 1),
+                .leftHip: jp(1, 1), .rightHip: jp(1, 1),
+                .leftAnkle: jp(2, 1), .rightAnkle: jp(2, 1),
+            ])
+        }
+        var t = 0.0
+        for _ in 0..<10 { _ = a.process(lyingFrame(t: t)); t += 0.1 }
+        #expect(a.progress == 0)
     }
 
     @Test("registry returns fresh analyzers for known ids and nil otherwise")

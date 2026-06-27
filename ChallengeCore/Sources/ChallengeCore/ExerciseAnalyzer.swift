@@ -146,13 +146,21 @@ public struct LungeAnalyzer: ExerciseAnalyzer {
 /// reads off whichever segment is visible (shoulder→ankle, else shoulder→hip),
 /// so missing feet don't break it.
 ///
-/// Being horizontal isn't enough on its own — lying with your hips/thighs on the
-/// floor is also "horizontal." So when the full body line is visible the clock
-/// also requires it not be *collapsed*: a smoothed sag gate (with its own
-/// hysteresis) pauses time once the shoulder→hip→ankle line drops well off
-/// straight, and resumes when you press back up. Mild sag still counts but cues
-/// the fix; the gate only blocks a real collapse, so it doesn't reintroduce the
-/// old single-frame flicker.
+/// Being horizontal isn't enough on its own. Two ways to be horizontal that
+/// aren't a plank, each with its own gate:
+///
+/// 1. **Lying flat on the floor** looks identical to a plank from a 2D side view
+///    — same horizontal, straight body line. The real difference is that a plank
+///    is *propped up on the arms*. So the clock requires an **arm-support** gate:
+///    the shoulders must sit clearly above the forearms/hands (a steep arm
+///    segment). Arms flat along the floor → not propped → no count.
+/// 2. **Collapsing** with hips/thighs on the floor while still propped. A
+///    **sag gate** pauses the clock once the shoulder→hip→ankle line drops well
+///    off straight, and resumes when you press back up. Mild sag still counts but
+///    cues the fix.
+///
+/// All three gates (orientation, arm-support, sag) use the same smoothed +
+/// hysteresis recipe as the rep counter, so none reintroduce single-frame flicker.
 public struct PlankAnalyzer: ExerciseAnalyzer {
     public let definition = ExerciseDefinition(id: "plank", displayName: "Plank", goalUnit: .seconds)
     private let form: FormEvaluator
@@ -162,6 +170,10 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     /// Looser tilt that *breaks* an active hold. The gap above `enterTilt` is the
     /// hysteresis margin, so a brief wobble can't stop the clock.
     private let breakTilt: Double
+    /// Arm steepness (degrees from horizontal) at which the torso reads as
+    /// *propped up* on the arms (enter), and the looser steepness that drops it.
+    private let proppedEnter: Double
+    private let proppedBreak: Double
     /// Body-line deviation from straight (degrees) at which a collapsed plank
     /// *resumes* counting, and the looser deviation at which it *pauses*.
     private let sagResume: Double
@@ -170,8 +182,10 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     private let maxStep: TimeInterval = 0.5
     private let smoothingWindow: Int
     private var tilt: MovingAverage
+    private var arm: MovingAverage
     private var line: MovingAverage
     private var holding = false
+    private var propped = false
     private var formGood = true
     private var heldSeconds: Double = 0
     private var lastTimestamp: TimeInterval?
@@ -179,6 +193,7 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     public var progress: Double { heldSeconds }
 
     public init(enterTilt: Double = 40, breakTilt: Double = 60,
+                proppedEnter: Double = 30, proppedBreak: Double = 20,
                 sagResume: Double = 30, sagBreak: Double = 45,
                 smoothingWindow: Int = 5, minConfidence: Double = 0.5) {
         // FormEvaluator supplies the body-line angle (sag gate) and cue direction.
@@ -186,10 +201,13 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
         self.minConfidence = minConfidence
         self.enterTilt = enterTilt
         self.breakTilt = breakTilt
+        self.proppedEnter = proppedEnter
+        self.proppedBreak = proppedBreak
         self.sagResume = sagResume
         self.sagBreak = sagBreak
         self.smoothingWindow = smoothingWindow
         self.tilt = MovingAverage(windowSize: smoothingWindow)
+        self.arm = MovingAverage(windowSize: smoothingWindow)
         self.line = MovingAverage(windowSize: smoothingWindow)
     }
 
@@ -212,6 +230,15 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
         // Hysteresis: once holding, stay until clearly upright; only enter when flat.
         holding = holding ? smoothed <= breakTilt : smoothed <= enterTilt
 
+        // Arm-support gate: a plank is propped on the arms (steep shoulder→hand
+        // segment); lying flat has arms along the floor (~0°). Unjudgeable frames
+        // (arms not detected) hold the last verdict; it defaults to false so a
+        // never-established support won't count.
+        if let armSteepness = armTilt(frame) {
+            let a = arm.add(armSteepness)
+            propped = propped ? a >= proppedBreak : a >= proppedEnter
+        }
+
         // Sag gate: when the full body line is judgeable, a smoothed collapse
         // pauses the clock; unjudgeable frames (e.g. feet out of view) hold the
         // last verdict, which defaults to good so missing feet still count.
@@ -223,7 +250,7 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
 
         var cue: String?
         if holding {
-            if formGood { heldSeconds += dt }
+            if propped && formGood { heldSeconds += dt }
             switch eval.issue {  // coach even while the gate keeps counting
             case .sagging: cue = "Lift your hips"
             case .piking: cue = "Lower your hips"
@@ -231,6 +258,24 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
             }
         }
         return AnalyzerResult(progress: heldSeconds, didAdvance: false, poseVisible: true, formCue: cue)
+    }
+
+    /// Steepness (degrees from horizontal) of the arm propping the torso up:
+    /// the steepest shoulder→hand or shoulder→elbow segment where the shoulder
+    /// sits above the support. ~90° when stacked vertically (high plank), high
+    /// for a forearm plank, ~0° when arms lie along the floor. `nil` when the
+    /// shoulder or both supports are undetected; `0` when supports exist but none
+    /// are below the shoulder (e.g. arms overhead while lying flat).
+    private func armTilt(_ frame: PoseFrame) -> Double? {
+        guard let shoulder = midpoint(frame, .leftShoulder, .rightShoulder) else { return nil }
+        let supports = [midpoint(frame, .leftWrist, .rightWrist),
+                        midpoint(frame, .leftElbow, .rightElbow)].compactMap { $0 }
+        guard !supports.isEmpty else { return nil }
+        let steepnesses = supports.compactMap { s -> Double? in
+            guard shoulder.y > s.y else { return nil }   // shoulder must be above the support
+            return atan2(abs(shoulder.y - s.y), abs(shoulder.x - s.x)) * 180 / .pi
+        }
+        return steepnesses.max() ?? 0
     }
 
     /// Body tilt from horizontal in degrees (0 = flat plank, 90 = standing).
@@ -264,8 +309,10 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
 
     public mutating func reset() {
         tilt = MovingAverage(windowSize: smoothingWindow)
+        arm = MovingAverage(windowSize: smoothingWindow)
         line = MovingAverage(windowSize: smoothingWindow)
         holding = false
+        propped = false
         formGood = true
         heldSeconds = 0
         lastTimestamp = nil
