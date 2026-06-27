@@ -24,31 +24,33 @@ struct LiveWorkoutView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if cameraDenied {
-                deniedView
+            if coordinator.phase == .finished {
+                SummaryView(results: coordinator.results)
+                    .onAppear { saveIfNeeded() }
             } else {
-                CameraPreview(previewLayer: pipeline.previewLayer).ignoresSafeArea()
-                SkeletonOverlay(frame: latestFrame, imageSize: latestImageSize).ignoresSafeArea()
-            }
-
-            VStack {
-                switch coordinator.phase {
-                case .active:
-                    hud
-                    cueBanner
-                    Spacer()
-                case .resting:
-                    Spacer()
-                    restView
-                    Spacer()
-                case .finished:
-                    SummaryView(results: coordinator.results)
-                        .onAppear { saveIfNeeded() }
-                case .idle:
-                    ProgressView().tint(.white)
+                if cameraDenied {
+                    deniedView
+                } else {
+                    CameraPreview(previewLayer: pipeline.previewLayer).ignoresSafeArea()
+                    SkeletonOverlay(frame: latestFrame, imageSize: latestImageSize).ignoresSafeArea()
                 }
+
+                VStack {
+                    switch coordinator.phase {
+                    case .active:
+                        hud
+                        cueBanner
+                        Spacer()
+                    case .resting:
+                        Spacer()
+                        restView
+                        Spacer()
+                    case .idle, .finished:
+                        ProgressView().tint(.white)
+                    }
+                }
+                .padding()
             }
-            .padding()
         }
         .statusBarHidden()
         .task { await run() }
@@ -150,6 +152,7 @@ struct LiveWorkoutView: View {
             coordinator.feed(sample.frame)
             if coordinator.phase == .finished { break }
         }
+        pipeline.stop() // camera off once the workout completes
     }
 
     private func saveIfNeeded() {

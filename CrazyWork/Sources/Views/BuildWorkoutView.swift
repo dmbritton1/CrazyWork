@@ -2,9 +2,8 @@ import SwiftUI
 import ChallengeCore
 
 struct BuildWorkoutView: View {
-    @State private var plan: [PlannedSet] = []
+    @State private var entries: [WorkoutEntry] = []
 
-    /// Default target per goal unit: 10 reps, or a 30-second hold.
     private static func defaultTarget(for unit: GoalUnit) -> Int {
         switch unit {
         case .reps: return 10
@@ -12,23 +11,31 @@ struct BuildWorkoutView: View {
         }
     }
 
+    private var plannedSetCount: Int { WorkoutPlan.expand(entries).count }
+
     var body: some View {
         NavigationStack {
             List {
-                Section("Exercises") {
+                Section("Add exercise") {
                     ForEach(ExerciseRegistry.all, id: \.id) { info in
-                        Button("Add \(info.displayName) — \(targetLabel(info.goalUnit, Self.defaultTarget(for: info.goalUnit)))") {
-                            plan.append(PlannedSet(exerciseID: info.id,
-                                                   target: Self.defaultTarget(for: info.goalUnit)))
+                        Button {
+                            entries.append(WorkoutEntry(exerciseID: info.id, sets: 3,
+                                                        target: Self.defaultTarget(for: info.goalUnit)))
+                        } label: {
+                            Label(info.displayName, systemImage: "plus.circle.fill")
                         }
                     }
                 }
                 Section("Your workout") {
-                    if plan.isEmpty { Text("No sets yet").foregroundStyle(.secondary) }
-                    ForEach(plan) { set in
-                        Text("\(displayName(set.exerciseID)) — \(targetLabel(unit(set.exerciseID), set.target))")
+                    if entries.isEmpty {
+                        Text("No exercises yet").foregroundStyle(.secondary)
                     }
-                    .onDelete { plan.remove(atOffsets: $0) }
+                    ForEach($entries) { $entry in
+                        EntryRow(entry: $entry,
+                                 unit: unit(entry.exerciseID),
+                                 name: displayName(entry.exerciseID))
+                    }
+                    .onDelete { entries.remove(atOffsets: $0) }
                 }
             }
             .navigationTitle("Build Workout")
@@ -36,18 +43,16 @@ struct BuildWorkoutView: View {
                 NavigationLink("History") { HistoryView() }
             }
             .safeAreaInset(edge: .bottom) {
-                NavigationLink("Start Workout") { LiveWorkoutView(plan: plan) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(plan.isEmpty)
-                    .padding()
+                NavigationLink {
+                    LiveWorkoutView(plan: WorkoutPlan.expand(entries))
+                } label: {
+                    Text(entries.isEmpty ? "Start Workout" : "Start Workout · \(plannedSetCount) sets")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(entries.isEmpty)
+                .padding()
             }
-        }
-    }
-
-    private func targetLabel(_ unit: GoalUnit, _ target: Int) -> String {
-        switch unit {
-        case .reps: return "×\(target)"
-        case .seconds: return "\(target)s"
         }
     }
 
@@ -57,5 +62,26 @@ struct BuildWorkoutView: View {
 
     private func displayName(_ id: String) -> String {
         ExerciseRegistry.all.first { $0.id == id }?.displayName ?? id
+    }
+}
+
+/// One editable workout entry: exercise name + sets and per-set target steppers.
+private struct EntryRow: View {
+    @Binding var entry: WorkoutEntry
+    let unit: GoalUnit
+    let name: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(name).font(.headline)
+            Stepper("Sets: \(entry.sets)", value: $entry.sets, in: 1...10)
+            switch unit {
+            case .reps:
+                Stepper("Reps: \(entry.target)", value: $entry.target, in: 1...50)
+            case .seconds:
+                Stepper("Hold: \(entry.target)s", value: $entry.target, in: 5...300, step: 5)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
