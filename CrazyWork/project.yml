@@ -13,6 +13,8 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "6.0"
+        DEVELOPMENT_TEAM: "7684T6LK27"
+        CODE_SIGN_STYLE: Automatic
     sources: [Sources]
     dependencies:
       - package: ChallengeCore
