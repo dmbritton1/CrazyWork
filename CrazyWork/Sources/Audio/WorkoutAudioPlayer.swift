@@ -30,8 +30,10 @@ final class WorkoutAudioPlayer {
     /// volume. Call when the live workout view goes away.
     func end() {
         synthesizer.stopSpeaking(at: .immediate)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        sessionActive = false
+        if sessionActive {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            sessionActive = false
+        }
     }
 
     private func run(_ action: AudioAction) {
@@ -52,7 +54,7 @@ final class WorkoutAudioPlayer {
     private func activateSessionIfNeeded() {
         guard !sessionActive else { return }
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, options: [.duckOthers, .mixWithOthers])
+        try? session.setCategory(.playback, options: .duckOthers)
         try? session.setActive(true)
         sessionActive = true
     }
