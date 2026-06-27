@@ -16,6 +16,11 @@ public struct JointTriple: Sendable, Equatable, Codable {
     }
 }
 
+/// How to combine the angles of multiple rep-joint triples into one rep angle.
+/// `.average` suits symmetric moves (pushup/squat: both sides move together);
+/// `.minimum` suits one-sided moves (lunge: track whichever knee is most bent).
+public enum AngleCombination: Sendable, Equatable { case average, minimum }
+
 /// Tunables for rep detection. Defaults match the pushup engine: UP > 160°,
 /// DOWN < 90°, with a hysteresis gap between them so jitter can't double-count.
 public struct RepCounterConfig: Sendable, Equatable {
@@ -31,9 +36,11 @@ public struct RepCounterConfig: Sendable, Equatable {
     public var minConfidence: Double
     /// Frames of moving-average smoothing applied to the rep angle.
     public var smoothingWindow: Int
-    /// The joint triples whose angle is averaged to get the rep angle. Defaults
+    /// The joint triples whose angle is combined to get the rep angle. Defaults
     /// to both elbows (pushup). For a squat, pass both knees.
     public var repJoints: [JointTriple]
+    /// How the triple angles are combined into one rep angle.
+    public var combination: AngleCombination
 
     public init(upThreshold: Double = 160,
                 downThreshold: Double = 90,
@@ -44,7 +51,8 @@ public struct RepCounterConfig: Sendable, Equatable {
                 repJoints: [JointTriple] = [
                     JointTriple(.leftShoulder, .leftElbow, .leftWrist),
                     JointTriple(.rightShoulder, .rightElbow, .rightWrist),
-                ]) {
+                ],
+                combination: AngleCombination = .average) {
         self.upThreshold = upThreshold
         self.downThreshold = downThreshold
         self.minRepDuration = minRepDuration
@@ -52,6 +60,7 @@ public struct RepCounterConfig: Sendable, Equatable {
         self.minConfidence = minConfidence
         self.smoothingWindow = smoothingWindow
         self.repJoints = repJoints
+        self.combination = combination
     }
 }
 
@@ -153,12 +162,15 @@ public struct RepCounter: Sendable {
 
     // MARK: - Angle extraction
 
-    /// Averaged rep angle over whichever configured triples cleared the
+    /// Combined rep angle over whichever configured triples cleared the
     /// confidence gate. `nil` if none are usable this frame.
     private func repAngle(in frame: PoseFrame) -> Double? {
         let available = config.repJoints.compactMap { tripleAngle(frame, $0) }
         guard !available.isEmpty else { return nil }
-        return available.reduce(0, +) / Double(available.count)
+        switch config.combination {
+        case .average: return available.reduce(0, +) / Double(available.count)
+        case .minimum: return available.min()
+        }
     }
 
     private func tripleAngle(_ frame: PoseFrame, _ t: JointTriple) -> Double? {
