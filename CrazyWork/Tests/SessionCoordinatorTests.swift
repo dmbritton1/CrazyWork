@@ -3,13 +3,16 @@ import ChallengeCore
 @testable import CrazyWork
 
 final class SessionCoordinatorTests: XCTestCase {
-    /// A held, straight plank frame at time `t`.
+    /// A held, straight plank frame at time `t`: horizontal body, propped on the
+    /// arms (elbow/wrist below the shoulder) so the analyzer reads a real plank.
     private func plankFrame(_ t: TimeInterval) -> PoseFrame {
         func jp(_ x: Double, _ y: Double) -> JointPoint {
             JointPoint(location: Point2D(x: x, y: y), confidence: 0.9)
         }
         return PoseFrame(timestamp: t, joints: [
             .leftShoulder: jp(0, 1), .rightShoulder: jp(0, 1),
+            .leftElbow: jp(0, 0.4), .rightElbow: jp(0, 0.4),
+            .leftWrist: jp(0.3, 0.4), .rightWrist: jp(0.3, 0.4),
             .leftHip: jp(1, 1), .rightHip: jp(1, 1),
             .leftAnkle: jp(2, 1), .rightAnkle: jp(2, 1),
         ])
