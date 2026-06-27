@@ -3,22 +3,6 @@ import ChallengeCore
 @testable import CrazyWork
 
 final class SessionCoordinatorTests: XCTestCase {
-    /// One squat rep: down then up, repeated `count` times.
-    private func squatReps(_ count: Int) -> [PoseFrame] {
-        var frames: [PoseFrame] = []
-        var t = 0.0
-        for _ in 0..<count {
-            for knee in [170.0, 80.0, 170.0] {
-                var b = PoseFrameBuilderShim()
-                b.timestamp = t
-                b.knee(knee)
-                frames.append(b.build())
-                t += 0.5
-            }
-        }
-        return frames
-    }
-
     func testAdvancesToNextSetWhenTargetReached() {
         let plan = [
             PlannedSet(exerciseID: "squat", targetReps: 2),
@@ -28,7 +12,7 @@ final class SessionCoordinatorTests: XCTestCase {
         coord.start()
         XCTAssertEqual(coord.currentSetIndex, 0)
 
-        for f in squatReps(2) { coord.feed(f) }
+        for f in SquatFrames.reps(2) { coord.feed(f) }
 
         XCTAssertEqual(coord.currentSetIndex, 1)
         XCTAssertEqual(coord.phase, .resting)
@@ -37,7 +21,9 @@ final class SessionCoordinatorTests: XCTestCase {
     func testFinishingLastSetCompletesSession() {
         let coord = SessionCoordinator(plan: [PlannedSet(exerciseID: "squat", targetReps: 1)])
         coord.start()
-        for f in squatReps(1) { coord.feed(f) }
+        for f in SquatFrames.reps(1) { coord.feed(f) }
         XCTAssertEqual(coord.phase, .finished)
+        XCTAssertEqual(coord.results.count, 1)
+        XCTAssertEqual(coord.results.first?.completedReps, 1)
     }
 }

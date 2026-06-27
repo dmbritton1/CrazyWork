@@ -3,14 +3,17 @@ import SwiftData
 import UIKit
 import ChallengeCore
 
+/// The live workout: real camera preview, an aligned skeleton overlay, a rep
+/// HUD, form cues, rest between sets, and a saved summary at the end.
 struct LiveWorkoutView: View {
     let plan: [PlannedSet]
     @Environment(\.modelContext) private var modelContext
     @State private var coordinator: SessionCoordinator
-    @State private var pipeline: PosePipeline?
-    @State private var latestJoints: [JointName: Joint] = [:]
-    @State private var saved = false
+    @State private var pipeline = PosePipeline()
+    @State private var latestFrame: PoseFrame?
+    @State private var latestImageSize: CGSize = .zero
     @State private var cameraDenied = false
+    @State private var saved = false
 
     init(plan: [PlannedSet]) {
         self.plan = plan
@@ -20,75 +23,118 @@ struct LiveWorkoutView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            SkeletonOverlay(joints: latestJoints).ignoresSafeArea()
+
+            if cameraDenied {
+                deniedView
+            } else {
+                CameraPreview(previewLayer: pipeline.previewLayer).ignoresSafeArea()
+                SkeletonOverlay(frame: latestFrame, imageSize: latestImageSize).ignoresSafeArea()
+            }
 
             VStack {
-                if cameraDenied {
-                    VStack(spacing: 12) {
-                        Text("Camera access is off").font(.title2).foregroundStyle(.white)
-                        Text("CrazyWork needs the camera to count your reps.").foregroundStyle(.secondary)
-                        Button("Open Settings") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(url)
-                            }
-                        }.buttonStyle(.borderedProminent)
-                    }
-                } else if coordinator.phase == .active {
-                    let set = plan[coordinator.currentSetIndex]
-                    Text("Set \(coordinator.currentSetIndex + 1)/\(plan.count) · \(coordinator.currentReps)/\(set.targetReps)")
-                        .font(.title2).foregroundStyle(.white)
-                    Text("\(coordinator.currentReps)").font(.system(size: 96, weight: .bold)).foregroundStyle(.white)
-                    cueText
-                } else if coordinator.phase == .resting {
-                    Text("Rest").font(.largeTitle).foregroundStyle(.white)
-                    Button("Next set") { coordinator.beginNextSet() }.buttonStyle(.borderedProminent)
-                } else if coordinator.phase == .finished {
+                switch coordinator.phase {
+                case .active:
+                    hud
+                    cueBanner
+                    Spacer()
+                case .resting:
+                    Spacer()
+                    restView
+                    Spacer()
+                case .finished:
                     SummaryView(results: coordinator.results)
                         .onAppear { saveIfNeeded() }
+                case .idle:
+                    ProgressView().tint(.white)
                 }
             }
             .padding()
         }
-        .onAppear { coordinator.start(); Task { await startCamera() } }
-        .onDisappear { pipeline?.stop() }
+        .statusBarHidden()
+        .task { await run() }
+        .onDisappear { pipeline.stop() }
     }
 
-    @ViewBuilder private var cueText: some View {
-        switch coordinator.status {
-        case .outOfFrame: Text("Step back so I can see you").foregroundStyle(.yellow)
-        case .lowConfidence: Text("Improve lighting").foregroundStyle(.yellow)
-        case .tracking:
-            if let f = coordinator.lastFindings.first {
-                Text(cue(for: f)).foregroundStyle(.orange)
+    // MARK: - HUD
+
+    private var hud: some View {
+        VStack(spacing: 2) {
+            Text("\(coordinator.currentReps) / \(coordinator.currentTarget)")
+                .font(.system(size: 64, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+            Text("Set \(coordinator.currentSetIndex + 1) of \(plan.count) · \(exerciseName)")
+                .font(.headline)
+                .foregroundStyle(.white.opacity(0.8))
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    @ViewBuilder private var cueBanner: some View {
+        if !coordinator.poseVisible {
+            Label("Reposition so your whole body is in view", systemImage: "viewfinder")
+                .padding()
+                .background(.ultraThinMaterial, in: Capsule())
+                .foregroundStyle(.white)
+        } else if let cue = coordinator.lastFormCue {
+            Label(cue, systemImage: "exclamationmark.triangle.fill")
+                .padding()
+                .background(.orange, in: Capsule())
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var restView: some View {
+        VStack(spacing: 12) {
+            Text("Rest").font(.largeTitle.bold()).foregroundStyle(.white)
+            Text("Next: \(exerciseName)").foregroundStyle(.white.opacity(0.8))
+            Button("Start next set") { coordinator.beginNextSet() }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(24)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+    }
+
+    private var deniedView: some View {
+        ContentUnavailableView {
+            Label("Camera access needed", systemImage: "camera.fill")
+        } description: {
+            Text("CrazyWork counts your reps on-device. Enable the camera in Settings.")
+        } actions: {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
             }
         }
+        .foregroundStyle(.white)
     }
 
-    private func cue(for f: Finding) -> String {
-        switch f {
-        case .shallowDepth: return "Go deeper"
-        case .backNotStraight: return "Straighten your back"
-        case .torsoLean: return "Keep your chest up"
-        case .kneesCaving: return "Push your knees out"
-        }
+    private var exerciseName: String {
+        let id = plan.indices.contains(coordinator.currentSetIndex)
+            ? plan[coordinator.currentSetIndex].exerciseID : ""
+        return ExerciseRegistry.all.first { $0.id == id }?.displayName ?? id
     }
 
-    private func startCamera() async {
-        switch CameraAuthorization.current {
-        case .denied:
+    // MARK: - Lifecycle
+
+    private func run() async {
+        coordinator.start()
+        guard await CameraAuthorization.request() else {
             cameraDenied = true
             return
-        case .undetermined:
-            let granted = await CameraAuthorization.request()
-            if !granted { cameraDenied = true; return }
-        case .authorized:
-            break
         }
-        let p = PosePipeline(onPoseFrame: { frame in
-            latestJoints = frame.joints
-            coordinator.feed(frame)
-        })
-        do { try p.startThrowing(); pipeline = p } catch { cameraDenied = true }
+        pipeline.attachPreview(position: .front)
+        pipeline.configure(position: .front)
+        pipeline.start()
+
+        for await sample in pipeline.frames {
+            latestFrame = sample.frame
+            latestImageSize = sample.imageSize
+            coordinator.feed(sample.frame)
+            if coordinator.phase == .finished { break }
+        }
     }
 
     private func saveIfNeeded() {
