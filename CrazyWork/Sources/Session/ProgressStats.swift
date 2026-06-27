@@ -54,9 +54,10 @@ struct ProgressStats {
     }
 
     private static func currentStreak(days: Set<Date>, now: Date, calendar: Calendar) -> Int {
-        guard !days.isEmpty else { return 0 }
+        guard !days.isEmpty,
+              let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))
+        else { return 0 }
         let today = calendar.startOfDay(for: now)
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
         // Anchor at today if worked out today, else yesterday, else no streak.
         var cursor: Date
         if days.contains(today) {
@@ -69,7 +70,8 @@ struct ProgressStats {
         var streak = 0
         while days.contains(cursor) {
             streak += 1
-            cursor = calendar.date(byAdding: .day, value: -1, to: cursor)!
+            guard let prev = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = prev
         }
         return streak
     }

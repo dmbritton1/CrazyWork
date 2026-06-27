@@ -2,7 +2,11 @@ import XCTest
 @testable import CrazyWork
 
 final class ProgressStatsTests: XCTestCase {
-    private let cal = Calendar(identifier: .gregorian)
+    private let cal: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c
+    }()
 
     private func day(_ y: Int, _ m: Int, _ d: Int, h: Int = 12) -> Date {
         DateComponents(calendar: cal, year: y, month: m, day: d, hour: h).date!
