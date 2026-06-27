@@ -24,6 +24,7 @@ final class SessionCoordinator {
     private var cueCounts: [String: Int] = [:]
     private var visibleFrames = 0
     private var cuedFrames = 0
+    private var pendingEvents: [WorkoutEvent] = []
 
     struct SetResult {
         let exerciseID: String
@@ -57,8 +58,10 @@ final class SessionCoordinator {
         phase = .active
     }
 
-    func feed(_ frame: PoseFrame) {
-        guard phase == .active, var analyzer else { return }
+    @discardableResult
+    func feed(_ frame: PoseFrame) -> [WorkoutEvent] {
+        pendingEvents = []
+        guard phase == .active, var analyzer else { return [] }
         let result = analyzer.process(frame)
         self.analyzer = analyzer // write back the mutated struct
 
@@ -76,9 +79,18 @@ final class SessionCoordinator {
             }
         }
 
+        if result.didAdvance, goalUnit == .reps {
+            pendingEvents.append(.repCompleted(count: Int(result.progress)))
+        }
+        if goalUnit == .seconds {
+            pendingEvents.append(.held(seconds: result.progress, target: currentTarget))
+        }
+        pendingEvents.append(.formCue(result.poseVisible ? result.formCue : nil))
+
         if currentProgress >= Double(currentTarget) {
             finishCurrentSet()
         }
+        return pendingEvents
     }
 
     private func loadCurrentSet() {
@@ -106,11 +118,17 @@ final class SessionCoordinator {
             findingsSummary: cueCounts
         ))
 
+        pendingEvents.append(.setCompleted(index: currentSetIndex, total: plan.count))
+
         if currentSetIndex + 1 < plan.count {
             currentSetIndex += 1
             phase = .resting
+            let nextID = plan[currentSetIndex].exerciseID
+            let name = ExerciseRegistry.all.first { $0.id == nextID }?.displayName ?? nextID
+            pendingEvents.append(.rest(nextExerciseName: name))
         } else {
             phase = .finished
+            pendingEvents.append(.finished)
         }
     }
 }

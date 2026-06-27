@@ -51,4 +51,24 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(coord.phase, .finished)
         XCTAssertGreaterThanOrEqual(coord.results.first?.completed ?? 0, 1.0)
     }
+
+    func testFeedReturnsRepAndCompletionEvents() {
+        let coord = SessionCoordinator(plan: [PlannedSet(exerciseID: "squat", target: 1)])
+        coord.start()
+        var events: [WorkoutEvent] = []
+        for f in SquatFrames.reps(1) { events += coord.feed(f) }
+        XCTAssertTrue(events.contains(.repCompleted(count: 1)))
+        XCTAssertTrue(events.contains(.setCompleted(index: 0, total: 1)))
+        XCTAssertTrue(events.contains(.finished))
+    }
+
+    func testEmitsRestWithNextExerciseName() {
+        let plan = [PlannedSet(exerciseID: "squat", target: 1),
+                    PlannedSet(exerciseID: "lunge", target: 1)]
+        let coord = SessionCoordinator(plan: plan)
+        coord.start()
+        var events: [WorkoutEvent] = []
+        for f in SquatFrames.reps(1) { events += coord.feed(f) }
+        XCTAssertTrue(events.contains(.rest(nextExerciseName: "Lunge")))
+    }
 }
