@@ -5,7 +5,7 @@ import SwiftData
 struct CrazyWorkApp: App {
     var body: some Scene {
         WindowGroup {
-            BuildWorkoutView()
+            RootView()
         }
         .modelContainer(for: [WorkoutSession.self, ExerciseSet.self])
     }

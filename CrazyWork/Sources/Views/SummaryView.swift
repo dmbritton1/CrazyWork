@@ -6,6 +6,7 @@ import ChallengeCore
 /// per-set breakdown. Shown full-screen when a session finishes.
 struct SummaryView: View {
     let results: [SessionCoordinator.SetResult]
+    @Environment(\.dismiss) private var dismiss
 
     private struct Row: Identifiable {
         let id = UUID()
@@ -69,7 +70,7 @@ struct SummaryView: View {
                     }
                 }
 
-                NavigationLink("Done") { BuildWorkoutView() }
+                Button("Done") { dismiss() }
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity)
             }

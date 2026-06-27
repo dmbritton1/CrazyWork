@@ -2,7 +2,8 @@ import SwiftUI
 import ChallengeCore
 
 struct BuildWorkoutView: View {
-    @State private var entries: [WorkoutEntry] = []
+    @Binding var entries: [WorkoutEntry]
+    @Binding var restSeconds: Int
 
     private static func defaultTarget(for unit: GoalUnit) -> Int {
         switch unit {
@@ -37,11 +38,11 @@ struct BuildWorkoutView: View {
                     }
                     .onDelete { entries.remove(atOffsets: $0) }
                 }
+                Section("Rest between sets") {
+                    Stepper("Rest: \(restSeconds)s", value: $restSeconds, in: 0...180, step: 5)
+                }
             }
             .navigationTitle("Build Workout")
-            .toolbar {
-                NavigationLink("History") { HistoryView() }
-            }
             .safeAreaInset(edge: .bottom) {
                 NavigationLink {
                     LiveWorkoutView(plan: WorkoutPlan.expand(entries))
