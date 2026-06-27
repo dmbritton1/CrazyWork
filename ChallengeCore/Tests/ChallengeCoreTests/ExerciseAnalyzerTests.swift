@@ -125,22 +125,32 @@ struct ExerciseAnalyzerTests {
         #expect(last.didCompleteRep)
     }
 
-    @Test("PlankAnalyzer accumulates time only while the body line is held")
+    @Test("PlankAnalyzer holds through a blip but breaks on a sustained sag")
     func plankHold() {
         var a = PlankAnalyzer()
         var t = 0.0
         var last: AnalyzerResult?
-        for _ in 0..<5 { last = a.process(plankFrame(hipY: 1.0, t: t)); t += 0.1 } // ~0.4s held
-        #expect(abs(a.progress - 0.4) < 1e-6)
+        // Steady straight hold accumulates time.
+        for _ in 0..<8 { last = a.process(plankFrame(hipY: 1.0, t: t)); t += 0.1 }
+        #expect(a.progress > 0)
         #expect(last?.poseVisible == true)
+        #expect(last?.formCue == nil)
 
-        let sag = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1            // breaks form
-        #expect(abs(a.progress - 0.4) < 1e-6)                                  // no time added
-        #expect(sag.formCue == "Lift your hips")
+        // A single bad frame is absorbed by smoothing — the clock keeps holding.
+        let blip = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1
+        #expect(blip.formCue == nil)
 
-        let recovered = a.process(plankFrame(hipY: 1.0, t: t))                 // resumes
-        #expect(a.progress > 0.4)
-        #expect(recovered.formCue == nil)
+        // A sustained sag eventually breaks the hold and cues the fix.
+        let heldBeforeSag = a.progress
+        var sag: AnalyzerResult?
+        for _ in 0..<5 { sag = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1 }
+        #expect(sag?.formCue == "Lift your hips")
+        let heldAfterSag = a.progress
+        #expect(heldAfterSag - heldBeforeSag < 0.3) // little time leaked while breaking
+
+        // Recover: time resumes growing past where it stalled.
+        for _ in 0..<8 { _ = a.process(plankFrame(hipY: 1.0, t: t)); t += 0.1 }
+        #expect(a.progress > heldAfterSag)
     }
 
     @Test("registry returns fresh analyzers for known ids and nil otherwise")
