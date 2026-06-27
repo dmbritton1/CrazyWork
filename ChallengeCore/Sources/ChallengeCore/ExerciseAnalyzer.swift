@@ -144,8 +144,15 @@ public struct LungeAnalyzer: ExerciseAnalyzer {
 /// stable angle and threshold it with hysteresis — but use the body's *tilt from
 /// horizontal*. A plank is ~0°, standing is ~90°: a huge, jitter-proof gap. It
 /// reads off whichever segment is visible (shoulder→ankle, else shoulder→hip),
-/// so missing feet don't break it. Sag/pike is a non-blocking cue, the way the
-/// pushup counts reps regardless of form.
+/// so missing feet don't break it.
+///
+/// Being horizontal isn't enough on its own — lying with your hips/thighs on the
+/// floor is also "horizontal." So when the full body line is visible the clock
+/// also requires it not be *collapsed*: a smoothed sag gate (with its own
+/// hysteresis) pauses time once the shoulder→hip→ankle line drops well off
+/// straight, and resumes when you press back up. Mild sag still counts but cues
+/// the fix; the gate only blocks a real collapse, so it doesn't reintroduce the
+/// old single-frame flicker.
 public struct PlankAnalyzer: ExerciseAnalyzer {
     public let definition = ExerciseDefinition(id: "plank", displayName: "Plank", goalUnit: .seconds)
     private let form: FormEvaluator
@@ -155,25 +162,35 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     /// Looser tilt that *breaks* an active hold. The gap above `enterTilt` is the
     /// hysteresis margin, so a brief wobble can't stop the clock.
     private let breakTilt: Double
+    /// Body-line deviation from straight (degrees) at which a collapsed plank
+    /// *resumes* counting, and the looser deviation at which it *pauses*.
+    private let sagResume: Double
+    private let sagBreak: Double
     /// Cap per-frame time added, so a dropped-frame gap can't add a huge jump.
     private let maxStep: TimeInterval = 0.5
     private let smoothingWindow: Int
     private var tilt: MovingAverage
+    private var line: MovingAverage
     private var holding = false
+    private var formGood = true
     private var heldSeconds: Double = 0
     private var lastTimestamp: TimeInterval?
 
     public var progress: Double { heldSeconds }
 
     public init(enterTilt: Double = 40, breakTilt: Double = 60,
+                sagResume: Double = 30, sagBreak: Double = 45,
                 smoothingWindow: Int = 5, minConfidence: Double = 0.5) {
-        // FormEvaluator only supplies the sag/pike direction for the cue.
+        // FormEvaluator supplies the body-line angle (sag gate) and cue direction.
         self.form = FormEvaluator(config: FormConfig(strictness: .lenient, minConfidence: minConfidence))
         self.minConfidence = minConfidence
         self.enterTilt = enterTilt
         self.breakTilt = breakTilt
+        self.sagResume = sagResume
+        self.sagBreak = sagBreak
         self.smoothingWindow = smoothingWindow
         self.tilt = MovingAverage(windowSize: smoothingWindow)
+        self.line = MovingAverage(windowSize: smoothingWindow)
     }
 
     public mutating func process(_ frame: PoseFrame) -> AnalyzerResult {
@@ -195,10 +212,19 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
         // Hysteresis: once holding, stay until clearly upright; only enter when flat.
         holding = holding ? smoothed <= breakTilt : smoothed <= enterTilt
 
+        // Sag gate: when the full body line is judgeable, a smoothed collapse
+        // pauses the clock; unjudgeable frames (e.g. feet out of view) hold the
+        // last verdict, which defaults to good so missing feet still count.
+        let eval = form.evaluate(frame)
+        if let lineAngle = eval.bodyLineAngle {
+            let dev = 180 - line.add(lineAngle)
+            formGood = formGood ? dev <= sagBreak : dev <= sagResume
+        }
+
         var cue: String?
         if holding {
-            heldSeconds += dt
-            switch form.evaluate(frame).issue {  // non-blocking coaching
+            if formGood { heldSeconds += dt }
+            switch eval.issue {  // coach even while the gate keeps counting
             case .sagging: cue = "Lift your hips"
             case .piking: cue = "Lower your hips"
             case nil: cue = nil
@@ -238,7 +264,9 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
 
     public mutating func reset() {
         tilt = MovingAverage(windowSize: smoothingWindow)
+        line = MovingAverage(windowSize: smoothingWindow)
         holding = false
+        formGood = true
         heldSeconds = 0
         lastTimestamp = nil
     }

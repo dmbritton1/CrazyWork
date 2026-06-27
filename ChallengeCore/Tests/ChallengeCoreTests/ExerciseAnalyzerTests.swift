@@ -161,6 +161,22 @@ struct ExerciseAnalyzerTests {
         #expect(abs(a.progress - afterStanding) < 1e-6) // fully stopped while upright
     }
 
+    @Test("PlankAnalyzer stops counting when the body collapses to the floor")
+    func plankCollapse() {
+        var a = PlankAnalyzer()
+        var t = 0.0
+        for _ in 0..<8 { _ = a.process(plankFrame(hipY: 1.0, t: t)); t += 0.1 } // solid plank
+        #expect(a.progress > 0)
+
+        // Hips/thighs sink to the floor: still horizontal overall, but collapsed.
+        for _ in 0..<4 { _ = a.process(plankFrame(hipY: 0.1, t: t)); t += 0.1 } // transition
+        let afterCollapse = a.progress
+        var last: AnalyzerResult?
+        for _ in 0..<5 { last = a.process(plankFrame(hipY: 0.1, t: t)); t += 0.1 }
+        #expect(abs(a.progress - afterCollapse) < 1e-6) // clock fully stopped
+        #expect(last?.formCue == "Lift your hips")       // and tells you why
+    }
+
     @Test("PlankAnalyzer still counts when the feet leave the frame")
     func plankWithoutAnkles() {
         var a = PlankAnalyzer()
