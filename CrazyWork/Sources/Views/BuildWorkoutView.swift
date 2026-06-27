@@ -58,11 +58,11 @@ struct BuildWorkoutView: View {
     }
 
     private func unit(_ id: String) -> GoalUnit {
-        ExerciseRegistry.all.first { $0.id == id }?.goalUnit ?? .reps
+        ExerciseRegistry.goalUnit(for: id)
     }
 
     private func displayName(_ id: String) -> String {
-        ExerciseRegistry.all.first { $0.id == id }?.displayName ?? id
+        ExerciseRegistry.displayName(for: id)
     }
 }
 

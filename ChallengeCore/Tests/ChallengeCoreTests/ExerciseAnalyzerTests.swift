@@ -232,6 +232,17 @@ struct ExerciseAnalyzerTests {
         #expect(Set(ExerciseRegistry.all.map(\.id)) == ["pushup", "squat", "lunge", "plank"])
     }
 
+    @Test("registry lookups resolve ids, with fallbacks for unknown ones")
+    func registryLookups() {
+        #expect(ExerciseRegistry.definition(for: "plank")?.id == "plank")
+        #expect(ExerciseRegistry.definition(for: "moonwalk") == nil)
+        #expect(ExerciseRegistry.displayName(for: "pushup") == "Push-up")
+        #expect(ExerciseRegistry.displayName(for: "moonwalk") == "moonwalk") // falls back to the id
+        #expect(ExerciseRegistry.goalUnit(for: "plank") == .seconds)
+        #expect(ExerciseRegistry.goalUnit(for: "squat") == .reps)
+        #expect(ExerciseRegistry.goalUnit(for: "moonwalk") == .reps)      // defaults to reps
+    }
+
     @Test("reset clears progress")
     func resets() {
         var a = PushupAnalyzer()

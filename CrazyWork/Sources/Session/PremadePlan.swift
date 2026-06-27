@@ -17,7 +17,7 @@ extension PremadePlan {
     func estimatedSeconds(secondsPerRep: Double = 3) -> Int {
         let totalSets = entries.reduce(0) { $0 + max(0, $1.sets) }
         let work = entries.reduce(0.0) { running, entry in
-            let unit = ExerciseRegistry.all.first { $0.id == entry.exerciseID }?.goalUnit ?? .reps
+            let unit = ExerciseRegistry.goalUnit(for: entry.exerciseID)
             let perSet = unit == .reps ? Double(entry.target) * secondsPerRep : Double(entry.target)
             return running + Double(max(0, entry.sets)) * perSet
         }

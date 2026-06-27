@@ -335,6 +335,21 @@ public enum ExerciseRegistry {
         PlankAnalyzer().definition,
     ]
 
+    /// The definition for an exercise id, or `nil` if unknown.
+    public static func definition(for id: String) -> ExerciseDefinition? {
+        all.first { $0.id == id }
+    }
+
+    /// The display name for an exercise id, falling back to the raw id.
+    public static func displayName(for id: String) -> String {
+        definition(for: id)?.displayName ?? id
+    }
+
+    /// The goal unit for an exercise id, defaulting to `.reps` when unknown.
+    public static func goalUnit(for id: String) -> GoalUnit {
+        definition(for: id)?.goalUnit ?? .reps
+    }
+
     public static func makeAnalyzer(for id: String) -> (any ExerciseAnalyzer)? {
         switch id {
         case "pushup": return PushupAnalyzer()

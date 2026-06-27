@@ -20,7 +20,7 @@ struct SummaryView: View {
 
     private var rows: [Row] {
         results.enumerated().map { i, r in
-            let name = ExerciseRegistry.all.first { $0.id == r.exerciseID }?.displayName ?? r.exerciseID
+            let name = ExerciseRegistry.displayName(for: r.exerciseID)
             let detail: String
             switch r.goalUnit {
             case .reps:

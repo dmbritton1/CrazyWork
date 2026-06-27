@@ -124,8 +124,7 @@ final class SessionCoordinator {
             currentSetIndex += 1
             phase = .resting
             let nextID = plan[currentSetIndex].exerciseID
-            let name = ExerciseRegistry.all.first { $0.id == nextID }?.displayName ?? nextID
-            pendingEvents.append(.rest(nextExerciseName: name))
+            pendingEvents.append(.rest(nextExerciseName: ExerciseRegistry.displayName(for: nextID)))
         } else {
             phase = .finished
             pendingEvents.append(.finished)

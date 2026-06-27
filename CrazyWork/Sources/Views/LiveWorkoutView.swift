@@ -145,7 +145,7 @@ struct LiveWorkoutView: View {
     private var exerciseName: String {
         let id = plan.indices.contains(coordinator.currentSetIndex)
             ? plan[coordinator.currentSetIndex].exerciseID : ""
-        return ExerciseRegistry.all.first { $0.id == id }?.displayName ?? id
+        return ExerciseRegistry.displayName(for: id)
     }
 
     // MARK: - Lifecycle

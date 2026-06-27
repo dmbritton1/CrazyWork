@@ -38,7 +38,7 @@ struct PremadePlansView: View {
 
     private func exerciseSummary(_ plan: PremadePlan) -> String {
         plan.entries
-            .map { entry in ExerciseRegistry.all.first { $0.id == entry.exerciseID }?.displayName ?? entry.exerciseID }
+            .map { entry in ExerciseRegistry.displayName(for: entry.exerciseID) }
             .joined(separator: " · ")
     }
 }
