@@ -118,7 +118,10 @@ public struct LungeAnalyzer: ExerciseAnalyzer {
                 JointTriple(.leftHip, .leftKnee, .leftAnkle),
                 JointTriple(.rightHip, .rightKnee, .rightAnkle),
             ],
-            combination: .minimum)
+            combination: .minimum,
+            // A lunge bends one knee far more than the other; require that gap so
+            // a symmetric squat (both knees bending together) is not miscounted.
+            minAsymmetry: 35)
         self.counter = RepCounter(config: config)
     }
 

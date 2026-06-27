@@ -41,6 +41,12 @@ public struct RepCounterConfig: Sendable, Equatable {
     public var repJoints: [JointTriple]
     /// How the triple angles are combined into one rep angle.
     public var combination: AngleCombination
+    /// Minimum degrees of difference required between the two `repJoints` angles
+    /// at some point during the rep. `0` disables the check (symmetric moves like
+    /// pushups/squats). A lunge sets this so a symmetric squat — where both knees
+    /// bend together — is NOT counted as a lunge. Only applies when there are
+    /// exactly two triples.
+    public var minAsymmetry: Double
 
     public init(upThreshold: Double = 160,
                 downThreshold: Double = 90,
@@ -52,7 +58,8 @@ public struct RepCounterConfig: Sendable, Equatable {
                     JointTriple(.leftShoulder, .leftElbow, .leftWrist),
                     JointTriple(.rightShoulder, .rightElbow, .rightWrist),
                 ],
-                combination: AngleCombination = .average) {
+                combination: AngleCombination = .average,
+                minAsymmetry: Double = 0) {
         self.upThreshold = upThreshold
         self.downThreshold = downThreshold
         self.minRepDuration = minRepDuration
@@ -61,6 +68,7 @@ public struct RepCounterConfig: Sendable, Equatable {
         self.smoothingWindow = smoothingWindow
         self.repJoints = repJoints
         self.combination = combination
+        self.minAsymmetry = minAsymmetry
     }
 }
 
@@ -95,6 +103,7 @@ public struct RepCounter: Sendable {
     private var downStartTime: TimeInterval?
     private var minAngleInRep = Double.greatestFiniteMagnitude
     private var maxAngleInRep = -Double.greatestFiniteMagnitude
+    private var maxAsymmetryInRep = 0.0
 
     public init(config: RepCounterConfig = RepCounterConfig()) {
         self.config = config
@@ -102,11 +111,14 @@ public struct RepCounter: Sendable {
     }
 
     public mutating func process(_ frame: PoseFrame) -> RepUpdate {
-        guard let raw = repAngle(in: frame) else {
+        let tripleAngles = config.repJoints.map { tripleAngle(frame, $0) }
+        let available = tripleAngles.compactMap { $0 }
+        guard let raw = combine(available) else {
             // Pose lost: hold state, count nothing. Recovery resumes cleanly.
             return RepUpdate(count: count, phase: phase, didCompleteRep: false, poseVisible: false)
         }
 
+        let asymmetry = asymmetry(of: tripleAngles)
         let angle = smoother.add(raw)
         var didComplete = false
 
@@ -117,17 +129,17 @@ public struct RepCounter: Sendable {
             } else if angle < config.downThreshold {
                 // Started watching mid-bottom; wait for an UP before counting.
                 phase = .down
-                beginRep(at: frame.timestamp, angle: angle)
+                beginRep(at: frame.timestamp, angle: angle, asymmetry: asymmetry)
             }
 
         case .up:
             if angle < config.downThreshold {
                 phase = .down
-                beginRep(at: frame.timestamp, angle: angle)
+                beginRep(at: frame.timestamp, angle: angle, asymmetry: asymmetry)
             }
 
         case .down:
-            track(angle)
+            track(angle: angle, asymmetry: asymmetry)
             if angle > config.upThreshold {
                 if isValidRep(endingAt: frame.timestamp) {
                     count += 1
@@ -142,35 +154,45 @@ public struct RepCounter: Sendable {
 
     // MARK: - Rep bookkeeping
 
-    private mutating func beginRep(at time: TimeInterval, angle: Double) {
+    private mutating func beginRep(at time: TimeInterval, angle: Double, asymmetry: Double?) {
         downStartTime = time
         minAngleInRep = angle
         maxAngleInRep = angle
+        maxAsymmetryInRep = asymmetry ?? 0
     }
 
-    private mutating func track(_ angle: Double) {
+    private mutating func track(angle: Double, asymmetry: Double?) {
         minAngleInRep = min(minAngleInRep, angle)
         maxAngleInRep = max(maxAngleInRep, angle)
+        if let asymmetry { maxAsymmetryInRep = max(maxAsymmetryInRep, asymmetry) }
     }
 
     private func isValidRep(endingAt time: TimeInterval) -> Bool {
         guard let start = downStartTime else { return false }
         let duration = time - start
         let rom = maxAngleInRep - minAngleInRep
-        return duration >= config.minRepDuration && rom >= config.minRangeOfMotion
+        return duration >= config.minRepDuration
+            && rom >= config.minRangeOfMotion
+            && maxAsymmetryInRep >= config.minAsymmetry
     }
 
     // MARK: - Angle extraction
 
-    /// Combined rep angle over whichever configured triples cleared the
-    /// confidence gate. `nil` if none are usable this frame.
-    private func repAngle(in frame: PoseFrame) -> Double? {
-        let available = config.repJoints.compactMap { tripleAngle(frame, $0) }
+    /// Combine available triple angles into one rep angle. `nil` if none usable.
+    private func combine(_ available: [Double]) -> Double? {
         guard !available.isEmpty else { return nil }
         switch config.combination {
         case .average: return available.reduce(0, +) / Double(available.count)
         case .minimum: return available.min()
         }
+    }
+
+    /// Absolute difference between the two triple angles, when exactly two are
+    /// configured and both were detected this frame. `nil` otherwise — so a frame
+    /// where one side is occluded doesn't falsely read as symmetric.
+    private func asymmetry(of tripleAngles: [Double?]) -> Double? {
+        guard tripleAngles.count == 2, let a = tripleAngles[0], let b = tripleAngles[1] else { return nil }
+        return abs(a - b)
     }
 
     private func tripleAngle(_ frame: PoseFrame, _ t: JointTriple) -> Double? {

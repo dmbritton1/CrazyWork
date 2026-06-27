@@ -96,6 +96,19 @@ struct ExerciseAnalyzerTests {
         #expect(a.progress == 1)
     }
 
+    @Test("LungeAnalyzer ignores a symmetric squat (both knees bending together)")
+    func lungeIgnoresSquat() {
+        var a = LungeAnalyzer()
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        // Both knees bend together -> a squat, not a lunge.
+        for _ in 0..<8 { frames.append(legFrame(leftKnee: 175, rightKnee: 175, t: t)); t += 0.1 }
+        for _ in 0..<8 { frames.append(legFrame(leftKnee: 25, rightKnee: 25, t: t));   t += 0.1 }
+        for _ in 0..<8 { frames.append(legFrame(leftKnee: 175, rightKnee: 175, t: t)); t += 0.1 }
+        for f in frames { _ = a.process(f) }
+        #expect(a.progress == 0)
+    }
+
     @Test("minimum combination tracks the most-bent joint, not the average")
     func minimumCombination() {
         let config = RepCounterConfig(upThreshold: 160, downThreshold: 90,
