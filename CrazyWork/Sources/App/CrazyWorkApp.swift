@@ -1,11 +1,12 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct CrazyWorkApp: App {
     var body: some Scene {
         WindowGroup {
-            // Placeholder root; replaced by BuildWorkoutView in a later task.
-            Text("CrazyWork")
+            BuildWorkoutView()
         }
+        .modelContainer(for: [WorkoutSession.self, ExerciseSet.self])
     }
 }
