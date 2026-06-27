@@ -14,6 +14,8 @@ struct LiveWorkoutView: View {
     @State private var latestImageSize: CGSize = .zero
     @State private var cameraDenied = false
     @State private var saved = false
+    @State private var audioPlayer = WorkoutAudioPlayer()
+    @AppStorage("workoutAudioEnabled") private var audioEnabled = true
 
     init(plan: [PlannedSet]) {
         self.plan = plan
@@ -57,20 +59,35 @@ struct LiveWorkoutView: View {
         .onDisappear {
             pipeline.stop()
             UIApplication.shared.isIdleTimerDisabled = false // let the screen sleep again
+            audioPlayer.end()
         }
+        .onChange(of: audioEnabled) { _, enabled in audioPlayer.muted = !enabled }
     }
 
     // MARK: - HUD
 
     private var hud: some View {
-        VStack(spacing: 2) {
-            Text(progressText)
-                .font(.system(size: 64, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.white)
-            Text("Set \(coordinator.currentSetIndex + 1) of \(plan.count) · \(exerciseName)")
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
+        VStack(spacing: 8) {
+            Button {
+                audioEnabled.toggle()
+            } label: {
+                Image(systemName: audioEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .padding(8)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .accessibilityLabel(audioEnabled ? "Mute audio" : "Unmute audio")
+
+            VStack(spacing: 2) {
+                Text(progressText)
+                    .font(.system(size: 64, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                Text("Set \(coordinator.currentSetIndex + 1) of \(plan.count) · \(exerciseName)")
+                    .font(.headline)
+                    .foregroundStyle(.white.opacity(0.8))
+            }
         }
         .padding()
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
@@ -141,6 +158,7 @@ struct LiveWorkoutView: View {
 
     private func run() async {
         coordinator.start()
+        audioPlayer.muted = !audioEnabled
         UIApplication.shared.isIdleTimerDisabled = true // keep the screen awake mid-workout
         guard await CameraAuthorization.request() else {
             cameraDenied = true
@@ -153,7 +171,7 @@ struct LiveWorkoutView: View {
         for await sample in pipeline.frames {
             latestFrame = sample.frame
             latestImageSize = sample.imageSize
-            coordinator.feed(sample.frame)
+            for event in coordinator.feed(sample.frame) { audioPlayer.handle(event) }
             if coordinator.phase == .finished { break }
         }
         pipeline.stop() // camera off once the workout completes
