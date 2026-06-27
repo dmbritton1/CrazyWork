@@ -36,7 +36,7 @@ struct ExerciseAnalyzerTests {
         ])
     }
 
-    /// Side-view plank frame; hip height controls sag/pike.
+    /// Side-view plank frame: body horizontal along x; hip height controls sag/pike.
     private func plankFrame(hipY: Double, t: TimeInterval, confidence: Double = 0.9) -> PoseFrame {
         func jp(_ x: Double, _ y: Double) -> JointPoint {
             JointPoint(location: Point2D(x: x, y: y), confidence: confidence)
@@ -45,6 +45,18 @@ struct ExerciseAnalyzerTests {
             .leftShoulder: jp(0, 1), .rightShoulder: jp(0, 1),
             .leftHip: jp(1, hipY), .rightHip: jp(1, hipY),
             .leftAnkle: jp(2, 1), .rightAnkle: jp(2, 1),
+        ])
+    }
+
+    /// Standing/upright body: shoulders above hips above ankles at one x.
+    private func uprightFrame(t: TimeInterval, confidence: Double = 0.9) -> PoseFrame {
+        func jp(_ x: Double, _ y: Double) -> JointPoint {
+            JointPoint(location: Point2D(x: x, y: y), confidence: confidence)
+        }
+        return PoseFrame(timestamp: t, joints: [
+            .leftShoulder: jp(0, 2), .rightShoulder: jp(0, 2),
+            .leftHip: jp(0, 1), .rightHip: jp(0, 1),
+            .leftAnkle: jp(0, 0), .rightAnkle: jp(0, 0),
         ])
     }
 
@@ -125,32 +137,48 @@ struct ExerciseAnalyzerTests {
         #expect(last.didCompleteRep)
     }
 
-    @Test("PlankAnalyzer holds through a blip but breaks on a sustained sag")
+    @Test("PlankAnalyzer counts while horizontal, cues sag, stops when upright")
     func plankHold() {
         var a = PlankAnalyzer()
         var t = 0.0
         var last: AnalyzerResult?
-        // Steady straight hold accumulates time.
+        // Horizontal hold accumulates time.
         for _ in 0..<8 { last = a.process(plankFrame(hipY: 1.0, t: t)); t += 0.1 }
         #expect(a.progress > 0)
         #expect(last?.poseVisible == true)
         #expect(last?.formCue == nil)
 
-        // A single bad frame is absorbed by smoothing — the clock keeps holding.
-        let blip = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1
-        #expect(blip.formCue == nil)
+        // A sag keeps the clock running (form is non-blocking) but cues the fix.
+        let beforeSag = a.progress
+        let sag = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1
+        #expect(sag.formCue == "Lift your hips")
+        #expect(a.progress > beforeSag)
 
-        // A sustained sag eventually breaks the hold and cues the fix.
-        let heldBeforeSag = a.progress
-        var sag: AnalyzerResult?
-        for _ in 0..<5 { sag = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1 }
-        #expect(sag?.formCue == "Lift your hips")
-        let heldAfterSag = a.progress
-        #expect(heldAfterSag - heldBeforeSag < 0.3) // little time leaked while breaking
+        // Standing upright is not a plank: the clock settles and stops.
+        for _ in 0..<8 { _ = a.process(uprightFrame(t: t)); t += 0.1 } // transition out
+        let afterStanding = a.progress
+        for _ in 0..<5 { _ = a.process(uprightFrame(t: t)); t += 0.1 }
+        #expect(abs(a.progress - afterStanding) < 1e-6) // fully stopped while upright
+    }
 
-        // Recover: time resumes growing past where it stalled.
-        for _ in 0..<8 { _ = a.process(plankFrame(hipY: 1.0, t: t)); t += 0.1 }
-        #expect(a.progress > heldAfterSag)
+    @Test("PlankAnalyzer still counts when the feet leave the frame")
+    func plankWithoutAnkles() {
+        var a = PlankAnalyzer()
+        func torsoOnly(t: TimeInterval) -> PoseFrame {
+            func jp(_ x: Double, _ y: Double) -> JointPoint {
+                JointPoint(location: Point2D(x: x, y: y), confidence: 0.9)
+            }
+            // Only shoulders + hips, held horizontal — feet out of frame.
+            return PoseFrame(timestamp: t, joints: [
+                .leftShoulder: jp(0, 1), .rightShoulder: jp(0, 1),
+                .leftHip: jp(1, 1), .rightHip: jp(1, 1),
+            ])
+        }
+        var t = 0.0
+        var last: AnalyzerResult?
+        for _ in 0..<6 { last = a.process(torsoOnly(t: t)); t += 0.1 }
+        #expect(a.progress > 0)
+        #expect(last?.poseVisible == true)
     }
 
     @Test("registry returns fresh analyzers for known ids and nil otherwise")

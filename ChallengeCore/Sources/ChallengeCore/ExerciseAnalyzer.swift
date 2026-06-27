@@ -134,47 +134,49 @@ public struct LungeAnalyzer: ExerciseAnalyzer {
     public mutating func reset() { counter = RepCounter(config: config) }
 }
 
-/// Plank: a time-based hold. Accumulates seconds while a roughly-straight body
-/// line is held; pauses when form clearly breaks or the pose is lost.
+/// Plank: a time-based hold. Counts seconds while the body is held *horizontal*
+/// — the plank position — and pauses when you stand up or the pose is lost.
 ///
-/// Unlike the pushup coach (which grades a known-good plank tightly), this only
-/// needs to know "is the user holding the position." A forearm plank rides a few
-/// degrees off perfectly straight and the raw joints jitter, so a tight
-/// single-frame gate flickers the clock on and off. Three things keep it steady:
-/// the body-line angle is smoothed, the hold/break thresholds differ
-/// (hysteresis, so brief wobble doesn't stop the clock), and the band is wider
-/// than the pushup tolerance.
+/// Earlier versions thresholded how *straight* the shoulder→hip→ankle line was
+/// (≈180°). That needs all three joint groups detected at once (feet often leave
+/// the frame in a plank) and "is this line straight" is a jittery signal, so the
+/// clock never settled. Instead, mirror the rep counter's recipe — smooth one
+/// stable angle and threshold it with hysteresis — but use the body's *tilt from
+/// horizontal*. A plank is ~0°, standing is ~90°: a huge, jitter-proof gap. It
+/// reads off whichever segment is visible (shoulder→ankle, else shoulder→hip),
+/// so missing feet don't break it. Sag/pike is a non-blocking cue, the way the
+/// pushup counts reps regardless of form.
 public struct PlankAnalyzer: ExerciseAnalyzer {
     public let definition = ExerciseDefinition(id: "plank", displayName: "Plank", goalUnit: .seconds)
     private let form: FormEvaluator
-    /// Deviation from straight (180°) allowed to *enter* the hold.
-    private let holdTolerance: Double
-    /// Looser deviation that *breaks* an active hold. The gap above `holdTolerance`
-    /// is the hysteresis margin.
-    private let breakTolerance: Double
+    private let minConfidence: Double
+    /// Tilt from horizontal (degrees) allowed to *enter* the hold.
+    private let enterTilt: Double
+    /// Looser tilt that *breaks* an active hold. The gap above `enterTilt` is the
+    /// hysteresis margin, so a brief wobble can't stop the clock.
+    private let breakTilt: Double
     /// Cap per-frame time added, so a dropped-frame gap can't add a huge jump.
     private let maxStep: TimeInterval = 0.5
     private let smoothingWindow: Int
-    private var angle: MovingAverage
+    private var tilt: MovingAverage
     private var holding = false
     private var heldSeconds: Double = 0
     private var lastTimestamp: TimeInterval?
 
     public var progress: Double { heldSeconds }
 
-    public init(holdTolerance: Double = 30, breakTolerance: Double = 45,
+    public init(enterTilt: Double = 40, breakTilt: Double = 60,
                 smoothingWindow: Int = 5, minConfidence: Double = 0.5) {
-        // Lenient strictness here only supplies the sag/pike direction; the
-        // hold decision uses our own wider, smoothed band below.
+        // FormEvaluator only supplies the sag/pike direction for the cue.
         self.form = FormEvaluator(config: FormConfig(strictness: .lenient, minConfidence: minConfidence))
-        self.holdTolerance = holdTolerance
-        self.breakTolerance = breakTolerance
+        self.minConfidence = minConfidence
+        self.enterTilt = enterTilt
+        self.breakTilt = breakTilt
         self.smoothingWindow = smoothingWindow
-        self.angle = MovingAverage(windowSize: smoothingWindow)
+        self.tilt = MovingAverage(windowSize: smoothingWindow)
     }
 
     public mutating func process(_ frame: PoseFrame) -> AnalyzerResult {
-        let eval = form.evaluate(frame)
         let dt: Double
         if let last = lastTimestamp {
             dt = min(max(frame.timestamp - last, 0), maxStep)
@@ -183,21 +185,20 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
         }
         lastTimestamp = frame.timestamp
 
-        guard let raw = eval.bodyLineAngle else {
-            // Pose not judgeable: pause (keep accumulated time), don't reset.
+        guard let raw = bodyTilt(frame) else {
+            // Can't even tell orientation: pause (keep accumulated time).
             holding = false
             return AnalyzerResult(progress: heldSeconds, didAdvance: false, poseVisible: false, formCue: nil)
         }
 
-        let deviation = 180 - angle.add(raw)
-        // Hysteresis: once holding, stay until clearly broken; only (re)enter tight.
-        holding = holding ? deviation <= breakTolerance : deviation <= holdTolerance
+        let smoothed = tilt.add(raw)
+        // Hysteresis: once holding, stay until clearly upright; only enter when flat.
+        holding = holding ? smoothed <= breakTilt : smoothed <= enterTilt
 
         var cue: String?
         if holding {
             heldSeconds += dt
-        } else {
-            switch eval.issue {
+            switch form.evaluate(frame).issue {  // non-blocking coaching
             case .sagging: cue = "Lift your hips"
             case .piking: cue = "Lower your hips"
             case nil: cue = nil
@@ -206,8 +207,37 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
         return AnalyzerResult(progress: heldSeconds, didAdvance: false, poseVisible: true, formCue: cue)
     }
 
+    /// Body tilt from horizontal in degrees (0 = flat plank, 90 = standing).
+    /// Uses the widest reliably-detected segment so a missing ankle can't break
+    /// it; `nil` only when fewer than two joint groups are visible.
+    private func bodyTilt(_ frame: PoseFrame) -> Double? {
+        let shoulder = midpoint(frame, .leftShoulder, .rightShoulder)
+        let hip = midpoint(frame, .leftHip, .rightHip)
+        let ankle = midpoint(frame, .leftAnkle, .rightAnkle)
+        let segment: (Point2D, Point2D)?
+        if let s = shoulder, let a = ankle { segment = (s, a) }       // widest span
+        else if let s = shoulder, let h = hip { segment = (s, h) }    // feet out of frame
+        else if let h = hip, let a = ankle { segment = (h, a) }       // head out of frame
+        else { segment = nil }
+        guard let (p, q) = segment else { return nil }
+        return atan2(abs(q.y - p.y), abs(q.x - p.x)) * 180 / .pi
+    }
+
+    /// Average of two same-side joints when both clear the gate; otherwise the
+    /// single available side; `nil` when neither is detected.
+    private func midpoint(_ frame: PoseFrame, _ a: Joint, _ b: Joint) -> Point2D? {
+        let pa = frame.point(a, minConfidence: minConfidence)
+        let pb = frame.point(b, minConfidence: minConfidence)
+        switch (pa, pb) {
+        case let (p1?, p2?): return Point2D(x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2)
+        case let (p1?, nil): return p1
+        case let (nil, p2?): return p2
+        case (nil, nil): return nil
+        }
+    }
+
     public mutating func reset() {
-        angle = MovingAverage(windowSize: smoothingWindow)
+        tilt = MovingAverage(windowSize: smoothingWindow)
         holding = false
         heldSeconds = 0
         lastTimestamp = nil
