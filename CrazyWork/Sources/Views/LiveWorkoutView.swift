@@ -54,7 +54,10 @@ struct LiveWorkoutView: View {
         }
         .statusBarHidden()
         .task { await run() }
-        .onDisappear { pipeline.stop() }
+        .onDisappear {
+            pipeline.stop()
+            UIApplication.shared.isIdleTimerDisabled = false // let the screen sleep again
+        }
     }
 
     // MARK: - HUD
@@ -138,6 +141,7 @@ struct LiveWorkoutView: View {
 
     private func run() async {
         coordinator.start()
+        UIApplication.shared.isIdleTimerDisabled = true // keep the screen awake mid-workout
         guard await CameraAuthorization.request() else {
             cameraDenied = true
             return

@@ -140,7 +140,7 @@ struct ExerciseAnalyzerTests {
         #expect(last.didCompleteRep)
     }
 
-    @Test("PlankAnalyzer counts while horizontal, cues sag, stops when upright")
+    @Test("PlankAnalyzer counts while horizontal, absorbs a dip, stops when upright")
     func plankHold() {
         var a = PlankAnalyzer()
         var t = 0.0
@@ -151,11 +151,11 @@ struct ExerciseAnalyzerTests {
         #expect(last?.poseVisible == true)
         #expect(last?.formCue == nil)
 
-        // A sag keeps the clock running (form is non-blocking) but cues the fix.
-        let beforeSag = a.progress
-        let sag = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1
-        #expect(sag.formCue == "Lift your hips")
-        #expect(a.progress > beforeSag)
+        // A single dip is absorbed by smoothing: still counting, no warning yet.
+        let beforeDip = a.progress
+        let dip = a.process(plankFrame(hipY: 0.2, t: t)); t += 0.1
+        #expect(a.progress > beforeDip)
+        #expect(dip.formCue == nil)
 
         // Standing upright is not a plank: the clock settles and stops.
         for _ in 0..<8 { _ = a.process(uprightFrame(t: t)); t += 0.1 } // transition out

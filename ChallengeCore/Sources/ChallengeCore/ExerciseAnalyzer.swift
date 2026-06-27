@@ -154,12 +154,13 @@ public struct LungeAnalyzer: ExerciseAnalyzer {
 ///    is *propped up on the arms*. So the clock requires an **arm-support** gate:
 ///    the shoulders must sit clearly above the forearms/hands (a steep arm
 ///    segment). Arms flat along the floor → not propped → no count.
-/// 2. **Collapsing** with hips/thighs on the floor while still propped. A
-///    **sag gate** pauses the clock once the shoulder→hip→ankle line drops well
-///    off straight, and resumes when you press back up. Mild sag still counts but
-///    cues the fix.
+/// 2. **Bad body line** — hips sagging toward the floor or piked up. A **form
+///    gate** pauses the clock once the shoulder→hip→ankle line bends off straight
+///    in either direction, and resumes when you fix it. The on-screen warning
+///    ("Lift your hips" / "Lower your hips") shows exactly when this gate has
+///    paused, so being warned means you are not being credited.
 ///
-/// All three gates (orientation, arm-support, sag) use the same smoothed +
+/// All three gates (orientation, arm-support, form) use the same smoothed +
 /// hysteresis recipe as the rep counter, so none reintroduce single-frame flicker.
 public struct PlankAnalyzer: ExerciseAnalyzer {
     public let definition = ExerciseDefinition(id: "plank", displayName: "Plank", goalUnit: .seconds)
@@ -174,10 +175,10 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     /// *propped up* on the arms (enter), and the looser steepness that drops it.
     private let proppedEnter: Double
     private let proppedBreak: Double
-    /// Body-line deviation from straight (degrees) at which a collapsed plank
-    /// *resumes* counting, and the looser deviation at which it *pauses*.
-    private let sagResume: Double
-    private let sagBreak: Double
+    /// Body-line deviation from straight (degrees) at which the form gate *pauses*
+    /// the clock (and warns), and the tighter deviation at which it *resumes*.
+    private let formBreak: Double
+    private let formResume: Double
     /// Cap per-frame time added, so a dropped-frame gap can't add a huge jump.
     private let maxStep: TimeInterval = 0.5
     private let smoothingWindow: Int
@@ -194,17 +195,18 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
 
     public init(enterTilt: Double = 40, breakTilt: Double = 60,
                 proppedEnter: Double = 30, proppedBreak: Double = 20,
-                sagResume: Double = 30, sagBreak: Double = 45,
+                formBreak: Double = 22, formResume: Double = 14,
                 smoothingWindow: Int = 5, minConfidence: Double = 0.5) {
-        // FormEvaluator supplies the body-line angle (sag gate) and cue direction.
-        self.form = FormEvaluator(config: FormConfig(strictness: .lenient, minConfidence: minConfidence))
+        // FormEvaluator supplies the body-line angle (form gate) and, via a tight
+        // tolerance, the sag/pike direction for the warning whenever the gate trips.
+        self.form = FormEvaluator(config: FormConfig(strictness: .strict, minConfidence: minConfidence))
         self.minConfidence = minConfidence
         self.enterTilt = enterTilt
         self.breakTilt = breakTilt
         self.proppedEnter = proppedEnter
         self.proppedBreak = proppedBreak
-        self.sagResume = sagResume
-        self.sagBreak = sagBreak
+        self.formBreak = formBreak
+        self.formResume = formResume
         self.smoothingWindow = smoothingWindow
         self.tilt = MovingAverage(windowSize: smoothingWindow)
         self.arm = MovingAverage(windowSize: smoothingWindow)
@@ -239,22 +241,27 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
             propped = propped ? a >= proppedBreak : a >= proppedEnter
         }
 
-        // Sag gate: when the full body line is judgeable, a smoothed collapse
-        // pauses the clock; unjudgeable frames (e.g. feet out of view) hold the
-        // last verdict, which defaults to good so missing feet still count.
+        // Form gate: a smoothed deviation of the shoulder→hip→ankle line off
+        // straight pauses the clock in either direction (sag or pike). Unjudgeable
+        // frames (e.g. feet out of view) hold the last verdict, which defaults to
+        // good so missing feet still count.
         let eval = form.evaluate(frame)
         if let lineAngle = eval.bodyLineAngle {
             let dev = 180 - line.add(lineAngle)
-            formGood = formGood ? dev <= sagBreak : dev <= sagResume
+            formGood = formGood ? dev <= formBreak : dev <= formResume
         }
 
         var cue: String?
         if holding {
-            if propped && formGood { heldSeconds += dt }
-            switch eval.issue {  // coach even while the gate keeps counting
-            case .sagging: cue = "Lift your hips"
-            case .piking: cue = "Lower your hips"
-            case nil: cue = nil
+            if propped && formGood {
+                heldSeconds += dt          // good plank: count, no warning
+            } else if propped {
+                // Body line broke: warn and stop counting — warning ⇔ paused.
+                switch eval.issue {
+                case .sagging: cue = "Lift your hips"
+                case .piking: cue = "Lower your hips"
+                case nil: cue = nil
+                }
             }
         }
         return AnalyzerResult(progress: heldSeconds, didAdvance: false, poseVisible: true, formCue: cue)
