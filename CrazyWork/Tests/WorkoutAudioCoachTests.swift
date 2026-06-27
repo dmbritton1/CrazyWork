@@ -26,7 +26,7 @@ final class WorkoutAudioCoachTests: XCTestCase {
 
     func testPlankFinalCountdownEachNumberOnce() {
         var coach = WorkoutAudioCoach()
-        _ = coach.handle(.held(seconds: 30.0, target: 35)) // clear the 30s milestone first
+        _ = coach.handle(.held(seconds: 30.0, target: 35)) // prime the 30s milestone so it doesn't overlap the countdown
         XCTAssertEqual(coach.handle(.held(seconds: 32.0, target: 35)), [.speak("three")])
         XCTAssertEqual(coach.handle(.held(seconds: 33.0, target: 35)), [.speak("two")])
         XCTAssertEqual(coach.handle(.held(seconds: 34.0, target: 35)), [.speak("one")])
@@ -39,6 +39,13 @@ final class WorkoutAudioCoachTests: XCTestCase {
         XCTAssertEqual(coach.handle(.rest(nextExerciseName: "Lunge")),
                        [.restBeep, .speak("Rest. Next up: Lunge")])
         XCTAssertEqual(coach.handle(.finished), [.fanfare, .speak("Workout complete")])
+    }
+
+    func testMilestoneFrameSuppressesCountdown() {
+        var coach = WorkoutAudioCoach()
+        // At 30s with a 33s target, the 30s milestone coincides with "three" —
+        // the milestone wins and the countdown number is skipped this frame.
+        XCTAssertEqual(coach.handle(.held(seconds: 30.0, target: 33)), [.tick, .speak("30 seconds")])
     }
 
     func testSetCompletedResetsPerSetState() {

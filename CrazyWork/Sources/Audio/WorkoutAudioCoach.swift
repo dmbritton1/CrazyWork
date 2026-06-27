@@ -40,6 +40,8 @@ struct WorkoutAudioCoach {
             lastMilestone = milestone
             actions += [.tick, .speak("\(milestone) seconds")]
         }
+        // A milestone wins its frame: don't stack a countdown number on top of it.
+        guard actions.isEmpty else { return actions }
         let remaining = Double(target) - seconds
         for n in [3, 2, 1]
         where remaining <= Double(n) && remaining > Double(n) - 1 && !spokenCountdown.contains(n) {
