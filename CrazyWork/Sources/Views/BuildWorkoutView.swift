@@ -45,7 +45,7 @@ struct BuildWorkoutView: View {
             .navigationTitle("Build Workout")
             .safeAreaInset(edge: .bottom) {
                 NavigationLink {
-                    LiveWorkoutView(plan: WorkoutPlan.expand(entries))
+                    LiveWorkoutView(plan: WorkoutPlan.expand(entries), restSeconds: restSeconds)
                 } label: {
                     Text(entries.isEmpty ? "Start Workout" : "Start Workout · \(plannedSetCount) sets")
                         .frame(maxWidth: .infinity)

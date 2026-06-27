@@ -7,6 +7,7 @@ import ChallengeCore
 /// HUD, form cues, rest between sets, and a saved summary at the end.
 struct LiveWorkoutView: View {
     let plan: [PlannedSet]
+    let restSeconds: Int
     @Environment(\.modelContext) private var modelContext
     @State private var coordinator: SessionCoordinator
     @State private var pipeline = PosePipeline()
@@ -17,8 +18,9 @@ struct LiveWorkoutView: View {
     @State private var audioPlayer = WorkoutAudioPlayer()
     @AppStorage("workoutAudioEnabled") private var audioEnabled = true
 
-    init(plan: [PlannedSet]) {
+    init(plan: [PlannedSet], restSeconds: Int) {
         self.plan = plan
+        self.restSeconds = restSeconds
         _coordinator = State(initialValue: SessionCoordinator(plan: plan))
     }
 
@@ -45,7 +47,10 @@ struct LiveWorkoutView: View {
                         Spacer()
                     case .resting:
                         Spacer()
-                        restView
+                        RestCountdownView(seconds: restSeconds, nextExercise: exerciseName) {
+                            coordinator.beginNextSet()
+                        }
+                        .id(coordinator.currentSetIndex)
                         Spacer()
                     case .idle, .finished:
                         ProgressView().tint(.white)
@@ -120,17 +125,6 @@ struct LiveWorkoutView: View {
                 .background(.orange, in: Capsule())
                 .foregroundStyle(.white)
         }
-    }
-
-    private var restView: some View {
-        VStack(spacing: 12) {
-            Text("Rest").font(.largeTitle.bold()).foregroundStyle(.white)
-            Text("Next: \(exerciseName)").foregroundStyle(.white.opacity(0.8))
-            Button("Start next set") { coordinator.beginNextSet() }
-                .buttonStyle(.borderedProminent)
-        }
-        .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private var deniedView: some View {
