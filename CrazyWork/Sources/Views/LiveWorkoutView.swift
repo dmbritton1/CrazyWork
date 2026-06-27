@@ -59,7 +59,7 @@ struct LiveWorkoutView: View {
 
     private var hud: some View {
         VStack(spacing: 2) {
-            Text("\(coordinator.currentReps) / \(coordinator.currentTarget)")
+            Text(progressText)
                 .font(.system(size: 64, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.white)
@@ -69,6 +69,21 @@ struct LiveWorkoutView: View {
         }
         .padding()
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    /// "7 / 12" for reps, "0:18 / 0:30" for a timed hold.
+    private var progressText: String {
+        switch coordinator.goalUnit {
+        case .reps:
+            return "\(Int(coordinator.currentProgress)) / \(coordinator.currentTarget)"
+        case .seconds:
+            return "\(Self.clock(coordinator.currentProgress)) / \(Self.clock(Double(coordinator.currentTarget)))"
+        }
+    }
+
+    static func clock(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded(.down))
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     @ViewBuilder private var cueBanner: some View {
@@ -142,8 +157,9 @@ struct LiveWorkoutView: View {
         saved = true
         let session = WorkoutSession(startedAt: Date())
         for (i, r) in coordinator.results.enumerated() {
-            let set = ExerciseSet(exerciseID: r.exerciseID, targetReps: r.targetReps, order: i)
-            set.completedReps = r.completedReps
+            let set = ExerciseSet(exerciseID: r.exerciseID, goalUnit: r.goalUnit.rawValue,
+                                  target: r.target, order: i)
+            set.completed = r.completed
             set.averageFormScore = r.averageFormScore
             set.findingsSummary = r.findingsSummary
             session.sets.append(set)

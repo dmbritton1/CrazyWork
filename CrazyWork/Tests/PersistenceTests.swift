@@ -9,23 +9,29 @@ final class PersistenceTests: XCTestCase {
         return ModelContext(container)
     }
 
-    func testSaveAndFetchSessionWithSets() throws {
+    func testSaveAndFetchRepAndHoldSets() throws {
         let ctx = try inMemoryContext()
         let session = WorkoutSession(startedAt: Date())
-        let set = ExerciseSet(exerciseID: "squat", targetReps: 12, order: 0)
-        set.completedReps = 12
-        set.averageFormScore = 0.9
-        set.findingsSummary = ["shallowDepth": 2]
-        session.sets.append(set)
+
+        let squat = ExerciseSet(exerciseID: "squat", goalUnit: "reps", target: 12, order: 0)
+        squat.completed = 12
+        squat.averageFormScore = 0.9
+        squat.findingsSummary = ["Lift your hips": 2]
+
+        let plank = ExerciseSet(exerciseID: "plank", goalUnit: "seconds", target: 30, order: 1)
+        plank.completed = 28
+
+        session.sets.append(squat)
+        session.sets.append(plank)
         session.endedAt = Date()
         ctx.insert(session)
         try ctx.save()
 
         let fetched = try ctx.fetch(FetchDescriptor<WorkoutSession>())
         XCTAssertEqual(fetched.count, 1)
-        XCTAssertEqual(fetched[0].sets.count, 1)
-        XCTAssertEqual(fetched[0].sets[0].exerciseID, "squat")
-        XCTAssertEqual(fetched[0].sets[0].findingsSummary["shallowDepth"], 2)
-        XCTAssertEqual(fetched[0].totalReps, 12)
+        XCTAssertEqual(fetched[0].sets.count, 2)
+        XCTAssertEqual(fetched[0].totalReps, 12)             // rep sets only
+        XCTAssertEqual(fetched[0].totalHoldSeconds, 28)      // seconds sets only
+        XCTAssertEqual(fetched[0].sets.first { $0.exerciseID == "squat" }?.findingsSummary["Lift your hips"], 2)
     }
 }

@@ -3,10 +3,22 @@ import ChallengeCore
 @testable import CrazyWork
 
 final class SessionCoordinatorTests: XCTestCase {
-    func testAdvancesToNextSetWhenTargetReached() {
+    /// A held, straight plank frame at time `t`.
+    private func plankFrame(_ t: TimeInterval) -> PoseFrame {
+        func jp(_ x: Double, _ y: Double) -> JointPoint {
+            JointPoint(location: Point2D(x: x, y: y), confidence: 0.9)
+        }
+        return PoseFrame(timestamp: t, joints: [
+            .leftShoulder: jp(0, 1), .rightShoulder: jp(0, 1),
+            .leftHip: jp(1, 1), .rightHip: jp(1, 1),
+            .leftAnkle: jp(2, 1), .rightAnkle: jp(2, 1),
+        ])
+    }
+
+    func testAdvancesToNextSetWhenRepTargetReached() {
         let plan = [
-            PlannedSet(exerciseID: "squat", targetReps: 2),
-            PlannedSet(exerciseID: "squat", targetReps: 2),
+            PlannedSet(exerciseID: "squat", target: 2),
+            PlannedSet(exerciseID: "squat", target: 2),
         ]
         let coord = SessionCoordinator(plan: plan)
         coord.start()
@@ -18,12 +30,22 @@ final class SessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(coord.phase, .resting)
     }
 
-    func testFinishingLastSetCompletesSession() {
-        let coord = SessionCoordinator(plan: [PlannedSet(exerciseID: "squat", targetReps: 1)])
+    func testFinishingLastRepSetCompletesSession() {
+        let coord = SessionCoordinator(plan: [PlannedSet(exerciseID: "squat", target: 1)])
         coord.start()
         for f in SquatFrames.reps(1) { coord.feed(f) }
         XCTAssertEqual(coord.phase, .finished)
-        XCTAssertEqual(coord.results.count, 1)
-        XCTAssertEqual(coord.results.first?.completedReps, 1)
+        XCTAssertEqual(coord.results.first?.completed, 1)
+    }
+
+    func testPlankSecondsGoalCompletesWhenHeldLongEnough() {
+        let coord = SessionCoordinator(plan: [PlannedSet(exerciseID: "plank", target: 1)]) // 1 second
+        coord.start()
+        XCTAssertEqual(coord.goalUnit, .seconds)
+        // 15 frames at 0.1s spacing => ~1.4s of valid hold, past the 1s target.
+        var t = 0.0
+        for _ in 0..<15 { coord.feed(plankFrame(t)); t += 0.1 }
+        XCTAssertEqual(coord.phase, .finished)
+        XCTAssertGreaterThanOrEqual(coord.results.first?.completed ?? 0, 1.0)
     }
 }

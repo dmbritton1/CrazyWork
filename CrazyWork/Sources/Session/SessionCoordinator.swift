@@ -3,7 +3,8 @@ import Observation
 import ChallengeCore
 
 /// Drives a multi-set workout: swaps the active `ExerciseAnalyzer` per set,
-/// accumulates rep/form results, and advances through sets to completion.
+/// accumulates progress/form results, and advances through sets to completion.
+/// Goal-unit-agnostic — rep-based and time-based (plank) exercises are peers.
 /// UI-agnostic; the view feeds it frames on the main actor.
 @Observable
 final class SessionCoordinator {
@@ -12,7 +13,9 @@ final class SessionCoordinator {
     let plan: [PlannedSet]
     private(set) var currentSetIndex = 0
     private(set) var phase: Phase = .idle
-    private(set) var currentReps = 0
+    /// Current progress in the active exercise's goal unit (reps or seconds).
+    private(set) var currentProgress: Double = 0
+    private(set) var goalUnit: GoalUnit = .reps
     private(set) var poseVisible = false
     private(set) var lastFormCue: String?
     private(set) var results: [SetResult] = []
@@ -24,8 +27,9 @@ final class SessionCoordinator {
 
     struct SetResult {
         let exerciseID: String
-        let targetReps: Int
-        let completedReps: Int
+        let goalUnit: GoalUnit
+        let target: Int
+        let completed: Double
         /// Fraction of visible frames with acceptable form (1 = clean).
         let averageFormScore: Double
         /// Form-cue text -> how many frames showed it.
@@ -33,7 +37,7 @@ final class SessionCoordinator {
     }
 
     var currentTarget: Int {
-        plan.indices.contains(currentSetIndex) ? plan[currentSetIndex].targetReps : 0
+        plan.indices.contains(currentSetIndex) ? plan[currentSetIndex].target : 0
     }
 
     init(plan: [PlannedSet]) {
@@ -59,7 +63,7 @@ final class SessionCoordinator {
         self.analyzer = analyzer // write back the mutated struct
 
         poseVisible = result.poseVisible
-        currentReps = result.count
+        currentProgress = result.progress
 
         if result.poseVisible {
             visibleFrames += 1
@@ -72,15 +76,17 @@ final class SessionCoordinator {
             }
         }
 
-        if result.didCompleteRep, currentReps >= currentTarget {
+        if currentProgress >= Double(currentTarget) {
             finishCurrentSet()
         }
     }
 
     private func loadCurrentSet() {
-        analyzer = ExerciseRegistry.makeAnalyzer(for: plan[currentSetIndex].exerciseID)
-        analyzer?.reset()
-        currentReps = 0
+        let analyzer = ExerciseRegistry.makeAnalyzer(for: plan[currentSetIndex].exerciseID)
+        self.analyzer = analyzer
+        self.analyzer?.reset()
+        goalUnit = analyzer?.definition.goalUnit ?? .reps
+        currentProgress = 0
         poseVisible = false
         lastFormCue = nil
         cueCounts = [:]
@@ -93,8 +99,9 @@ final class SessionCoordinator {
         let score = visibleFrames > 0 ? max(0, 1 - Double(cuedFrames) / Double(visibleFrames)) : 1
         results.append(SetResult(
             exerciseID: set.exerciseID,
-            targetReps: set.targetReps,
-            completedReps: currentReps,
+            goalUnit: goalUnit,
+            target: set.target,
+            completed: currentProgress,
             averageFormScore: score,
             findingsSummary: cueCounts
         ))
