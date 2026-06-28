@@ -76,3 +76,14 @@ struct ProgressStats {
         return streak
     }
 }
+
+extension WorkoutSession {
+    /// This session reduced to the value type the stats math consumes.
+    var summary: SessionSummary {
+        SessionSummary(date: startedAt,
+                       reps: totalReps,
+                       holdSeconds: totalHoldSeconds,
+                       formScore: averageFormScore,
+                       duration: (endedAt ?? startedAt).timeIntervalSince(startedAt))
+    }
+}

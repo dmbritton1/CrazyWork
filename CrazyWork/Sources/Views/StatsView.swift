@@ -21,13 +21,7 @@ struct StatsView: View {
     }
 
     private var stats: ProgressStats {
-        ProgressStats(summaries: sessions.map { session in
-            SessionSummary(date: session.startedAt,
-                           reps: session.totalReps,
-                           holdSeconds: session.totalHoldSeconds,
-                           formScore: session.averageFormScore,
-                           duration: (session.endedAt ?? session.startedAt).timeIntervalSince(session.startedAt))
-        })
+        ProgressStats(summaries: sessions.map(\.summary))
     }
 
     private func content(_ stats: ProgressStats) -> some View {
