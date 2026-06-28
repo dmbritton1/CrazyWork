@@ -15,6 +15,7 @@ targets:
         SWIFT_VERSION: "6.0"
         DEVELOPMENT_TEAM: "7684T6LK27"
         CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Sources/App/CrazyWork.entitlements
     sources: [Sources]
     dependencies:
       - package: ChallengeCore
@@ -22,10 +23,15 @@ targets:
       path: Sources/App/Info.plist
       properties:
         NSCameraUsageDescription: "CrazyWork uses the camera to count your reps and check your form."
+        NSHealthShareUsageDescription: "CrazyWork reads your body metrics to estimate calories burned."
+        NSHealthUpdateUsageDescription: "CrazyWork saves your completed workouts to Apple Health."
         UILaunchScreen: {}
   CrazyWorkTests:
     type: bundle.unit-test
     platform: iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
     sources: [Tests]
     dependencies:
       - target: CrazyWork

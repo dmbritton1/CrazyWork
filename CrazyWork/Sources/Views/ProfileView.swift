@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import AVFoundation
+import HealthKit
 
 /// App appearance preference, persisted via `@AppStorage` (String-backed).
 enum AppearanceMode: String, CaseIterable {
@@ -34,6 +35,7 @@ struct ProfileView: View {
     @AppStorage("skeletonShowJoints") private var skeletonShowJoints = true
     @AppStorage("skeletonShowSkeleton") private var skeletonShowSkeleton = true
     @AppStorage("voiceID") private var voiceID = ""
+    @AppStorage("healthSyncEnabled") private var healthSyncEnabled = false
     @Query private var sessions: [WorkoutSession]
     @State private var previewSynth = AVSpeechSynthesizer()
     @State private var speechEnder = SpeechSessionEnder()
@@ -70,6 +72,16 @@ struct ProfileView: View {
                     previewVoice()
                 } label: {
                     Label("Preview voice", systemImage: "speaker.wave.2.fill")
+                }
+            }
+            if HKHealthStore.isHealthDataAvailable() {
+                Section("Apple Health") {
+                    Toggle("Connect Apple Health", isOn: $healthSyncEnabled)
+                        .onChange(of: healthSyncEnabled) { _, isOn in
+                            if isOn {
+                                Task { try? await HealthStore.shared.requestAuthorization() }
+                            }
+                        }
                 }
             }
             Section("Pose overlay") {

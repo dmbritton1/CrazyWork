@@ -17,6 +17,7 @@ struct LiveWorkoutView: View {
     @State private var saved = false
     @State private var audioPlayer = WorkoutAudioPlayer()
     @AppStorage("workoutAudioEnabled") private var audioEnabled = true
+    @AppStorage("healthSyncEnabled") private var healthSyncEnabled = false
 
     init(plan: [PlannedSet], restSeconds: Int) {
         self.plan = plan
@@ -189,6 +190,17 @@ struct LiveWorkoutView: View {
             try modelContext.save()
         } catch {
             assertionFailure("Failed to save workout: \(error)") // don't silently lose history
+        }
+
+        guard healthSyncEnabled else { return }
+        let results = coordinator.results
+        let start = session.startedAt
+        let end = session.endedAt ?? Date()
+        Task {
+            let body = await HealthStore.shared.body()
+            let minutes = max(0, end.timeIntervalSince(start)) / 60
+            let kcal = CalorieEstimator.kilocalories(results: results, durationMinutes: minutes, body: body)
+            try? await HealthStore.shared.save(start: start, end: end, activeEnergyKcal: kcal)
         }
     }
 }

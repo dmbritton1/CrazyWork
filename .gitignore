@@ -1,0 +1,5 @@
+# Xcode build artifacts and xcodegen-generated project
+CrazyWork/build/
+CrazyWork/*.xcodeproj
+.build/
+DerivedData/
