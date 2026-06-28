@@ -7,6 +7,7 @@ import SwiftData
 struct PathView: View {
     @AppStorage("pathIndex") private var pathIndex = 0
     @AppStorage("pathLastCompletedDay") private var pathLastCompletedDay = Int.min
+    @State private var pulse = false
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
 
     private let rowHeight: CGFloat = 116
@@ -19,8 +20,10 @@ struct PathView: View {
     private var streak: Int {
         ProgressStats(summaries: sessions.map(\.summary)).currentStreak
     }
-    /// The current TODAY node (the one to do today, whether or not it's done).
-    private var todayDay: PathDay { PathProgram.day(at: pathIndex) }
+    /// The node "today" refers to: the one to do if not yet done, else the one
+    /// just completed today — so the focus card and supplementary reflect what
+    /// was actually done, not the next locked node.
+    private var todayDay: PathDay { PathProgram.day(at: doneToday ? pathIndex - 1 : pathIndex) }
     private var doneToday: Bool { progress.isCompletedToday(today: today) }
 
     /// Window of absolute node indices to render (not the whole infinite path).
@@ -42,6 +45,7 @@ struct PathView: View {
                 .padding(.bottom, Spacing.section)
             }
         }
+        .onAppear { pulse = true }
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -93,7 +97,6 @@ struct PathView: View {
     private var supplementarySection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("WANT MORE?").typography(Typography.bodySmStrong).foregroundStyle(Palette.mute)
-                .padding(.horizontal, Spacing.lg)
             ForEach(todayDay.supplementary) { bonus in
                 NavigationLink {
                     LiveWorkoutView(plan: WorkoutPlan.expand(bonus.entries),
@@ -155,7 +158,7 @@ struct PathView: View {
         let state = progress.state(of: nodeIndex, today: today)
         let day = PathProgram.day(at: nodeIndex)
         VStack(spacing: Spacing.xs) {
-            nodeCircle(state: state, day: day, nodeIndex: nodeIndex)
+            nodeCircle(state: state, day: day)
             Text(day.title).typography(Typography.captionMd)
                 .foregroundStyle(state == .locked || state == .lockedNext ? Palette.ash : Palette.body)
                 .lineLimit(1)
@@ -164,7 +167,7 @@ struct PathView: View {
     }
 
     @ViewBuilder
-    private func nodeCircle(state: NodeState, day: PathDay, nodeIndex: Int) -> some View {
+    private func nodeCircle(state: NodeState, day: PathDay) -> some View {
         switch state {
         case .done:
             circle(fill: Palette.brandRed, border: Palette.brandRed,
@@ -177,7 +180,12 @@ struct PathView: View {
                 circle(fill: Palette.brandRedSoft, border: Palette.brandRed,
                        symbol: ExerciseTile.symbol(for: day.entries.first?.exerciseID ?? ""),
                        symbolColor: Palette.accentRedBright)
-                    .overlay(Circle().stroke(Palette.brandRed, lineWidth: 2).scaleEffect(1.18).opacity(0.5))
+                    .overlay(
+                        Circle().stroke(Palette.brandRed, lineWidth: 2)
+                            .scaleEffect(pulse ? 1.3 : 1.04)
+                            .opacity(pulse ? 0 : 0.6)
+                            .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false), value: pulse)
+                    )
             }
             .buttonStyle(.plain)
         case .lockedNext, .locked:
