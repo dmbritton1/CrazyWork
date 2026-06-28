@@ -11,6 +11,11 @@ struct SkeletonOverlay: View {
     let imageSize: CGSize
     var minConfidence: Double = 0.3
 
+    @AppStorage("skeletonColor") private var skeletonColor = SkeletonColor.green
+    @AppStorage("skeletonThickness") private var skeletonThickness = SkeletonThickness.medium
+    @AppStorage("skeletonShowJoints") private var showJoints = true
+    @AppStorage("skeletonShowSkeleton") private var showSkeleton = true
+
     private static let bones: [(ChallengeCore.Joint, ChallengeCore.Joint)] = [
         (.leftShoulder, .rightShoulder),
         (.leftShoulder, .leftElbow), (.leftElbow, .leftWrist),
@@ -25,7 +30,8 @@ struct SkeletonOverlay: View {
         GeometryReader { geo in
             let size = geo.size
             Canvas { context, _ in
-                guard let frame else { return }
+                guard let frame, showSkeleton else { return }
+                let stroke = skeletonColor.color
 
                 for (a, b) in Self.bones {
                     guard let pa = point(a, in: frame, size: size),
@@ -33,13 +39,17 @@ struct SkeletonOverlay: View {
                     var path = Path()
                     path.move(to: pa)
                     path.addLine(to: pb)
-                    context.stroke(path, with: .color(.green.opacity(0.8)), lineWidth: 3)
+                    context.stroke(path, with: .color(stroke.opacity(0.85)),
+                                   lineWidth: skeletonThickness.lineWidth)
                 }
 
-                for joint in ChallengeCore.Joint.allCases {
-                    guard let p = point(joint, in: frame, size: size) else { continue }
-                    let dot = Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
-                    context.fill(dot, with: .color(.yellow))
+                if showJoints {
+                    let r = skeletonThickness.dotRadius
+                    for joint in ChallengeCore.Joint.allCases {
+                        guard let p = point(joint, in: frame, size: size) else { continue }
+                        let dot = Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
+                        context.fill(dot, with: .color(stroke))
+                    }
                 }
             }
         }
