@@ -144,14 +144,16 @@ struct PathView: View {
     private var trail: some View {
         GeometryReader { geo in
             let cx = geo.size.width / 2
-            let amp = min(cx - 78, 124)   // keep dots + labels clear of the edges
+            let amp = min(cx - 24, 172)      // shared with the ribbon
+            let maxOff = cx - 66             // keep dots + labels on screen
             let height = rowHeight * CGFloat(windowIndices.count)
-            let points = windowIndices.indices.map { local in
-                CGPoint(x: cx + wave(windowIndices[local]) * amp,
-                        y: rowHeight / 2 + CGFloat(local) * rowHeight)
+            let points = windowIndices.indices.map { local -> CGPoint in
+                let y = rowHeight / 2 + CGFloat(local) * rowHeight
+                let x = cx + ribbonWave(y) * amp + insideOffset(y)  // tuck into the curve
+                return CGPoint(x: min(cx + maxOff, max(cx - maxOff, x)), y: y)
             }
             ZStack(alignment: .topLeading) {
-                flowLine(height: height, cx: cx)
+                flowLine(height: height, cx: cx, amp: amp)
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
                     nodeView(nodeIndex).position(points[local])
                 }
@@ -164,8 +166,7 @@ struct PathView: View {
     /// An abstract red ribbon that meanders on its own — wider amplitude and a
     /// different rhythm than the dots, so it weaves around them rather than
     /// connecting them — with two fainter offset echoes for depth.
-    private func flowLine(height: CGFloat, cx: CGFloat) -> some View {
-        let amp = min(cx - 24, 172)   // swings wider than the dots
+    private func flowLine(height: CGFloat, cx: CGFloat, amp: CGFloat) -> some View {
         let path = abstractPath(height: height, cx: cx, amp: amp)
         return ZStack {
             path.stroke(Palette.hairlineStrong,
@@ -198,12 +199,16 @@ struct PathView: View {
         return CGFloat(max(-1.15, min(1.15, v)))
     }
 
-    /// Organic horizontal placement in [-1, 1] as a function of the absolute
-    /// node index — two summed sines so the dots wander rather than zig-zag.
-    private func wave(_ i: Int) -> CGFloat {
-        let x = Double(i)
-        let v = sin(x * 1.10 - 0.5) * 0.60 + sin(x * 0.47 + 0.3) * 0.40
-        return CGFloat(max(-1, min(1, v)))
+    /// Signed horizontal nudge (points) pushing a node toward the concave —
+    /// "inside" — side of the ribbon's curve at vertical position `y`, larger
+    /// where the ribbon bends harder so dots nestle into each bow.
+    private func insideOffset(_ y: CGFloat) -> CGFloat {
+        let d = Double(y), a = 0.011, b = 0.027
+        let curvature = -(a * a) * 0.62 * sin(a * d + 0.6)
+                      - (b * b) * 0.52 * sin(b * d + 2.3)   // ribbonWave''(y)
+        let sign: CGFloat = curvature >= 0 ? 1 : -1
+        let strength = min(1, CGFloat(abs(curvature)) * 2200)
+        return sign * (38 + 46 * strength)
     }
 
     @ViewBuilder
