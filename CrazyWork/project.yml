@@ -25,6 +25,10 @@ targets:
         NSCameraUsageDescription: "CrazyWork uses the camera to count your reps and check your form."
         NSHealthShareUsageDescription: "CrazyWork reads your body metrics to estimate calories burned."
         NSHealthUpdateUsageDescription: "CrazyWork saves your completed workouts to Apple Health."
+        UIAppFonts:
+          - Inter-Regular.ttf
+          - Inter-Medium.ttf
+          - Inter-SemiBold.ttf
         UILaunchScreen: {}
   CrazyWorkTests:
     type: bundle.unit-test
