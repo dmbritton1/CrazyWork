@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 /// App appearance preference, persisted via `@AppStorage` (String-backed).
 enum AppearanceMode: String, CaseIterable {
@@ -32,6 +33,7 @@ struct ProfileView: View {
     @AppStorage("skeletonThickness") private var skeletonThickness = SkeletonThickness.medium
     @AppStorage("skeletonShowJoints") private var skeletonShowJoints = true
     @AppStorage("skeletonShowSkeleton") private var skeletonShowSkeleton = true
+    @AppStorage("voiceID") private var voiceID = ""
     @Query private var sessions: [WorkoutSession]
 
     private var stats: ProgressStats {
@@ -56,6 +58,12 @@ struct ProfileView: View {
                         Text(mode.label).tag(mode)
                     }
                 }
+                Picker("Voice", selection: $voiceID) {
+                    Text("Default").tag("")
+                    ForEach(voices, id: \.identifier) { voice in
+                        Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
+                    }
+                }
             }
             Section("Pose overlay") {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -77,6 +85,13 @@ struct ProfileView: View {
             }
         }
         .navigationTitle("Profile")
+    }
+
+    private var voices: [AVSpeechSynthesisVoice] {
+        let all = AVSpeechSynthesisVoice.speechVoices()
+        let lang = Locale.current.language.languageCode?.identifier ?? "en"
+        let matched = all.filter { $0.language.hasPrefix(lang) }
+        return (matched.isEmpty ? all : matched).sorted { $0.name < $1.name }
     }
 
     private func apply(_ preset: OverlayPreset) {

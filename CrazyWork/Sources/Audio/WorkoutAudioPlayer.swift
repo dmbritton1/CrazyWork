@@ -47,6 +47,10 @@ final class WorkoutAudioPlayer {
         case let .speak(text):
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+            if let id = UserDefaults.standard.string(forKey: "voiceID"), !id.isEmpty,
+               let voice = AVSpeechSynthesisVoice(identifier: id) {
+                utterance.voice = voice
+            }
             synthesizer.speak(utterance)
         }
     }
