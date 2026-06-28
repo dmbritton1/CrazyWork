@@ -39,6 +39,9 @@ struct ProfileView: View {
     @Query private var sessions: [WorkoutSession]
     @State private var previewSynth = AVSpeechSynthesizer()
     @State private var speechEnder = SpeechSessionEnder()
+    /// Loaded off the first render — enumerating system voices synchronously in
+    /// `body` (as a `.menu` Picker does outside a Form) blanks the launch frame.
+    @State private var availableVoices: [AVSpeechSynthesisVoice] = []
 
     private var stats: ProgressStats {
         ProgressStats(summaries: sessions.map(\.summary))
@@ -59,6 +62,7 @@ struct ProfileView: View {
             .tint(Palette.brandRed)
         }
         .navigationTitle("Profile")
+        .task { if availableVoices.isEmpty { availableVoices = Self.loadVoices() } }
     }
 
     private var headerCard: some View {
@@ -87,7 +91,7 @@ struct ProfileView: View {
             .pickerStyle(.segmented)
             Picker("Voice", selection: $voiceID) {
                 Text("Default").tag("")
-                ForEach(voices, id: \.identifier) { voice in
+                ForEach(availableVoices, id: \.identifier) { voice in
                     Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
                 }
             }
@@ -142,7 +146,7 @@ struct ProfileView: View {
         Text(text).typography(Typography.bodySmStrong).foregroundStyle(Palette.mute)
     }
 
-    private var voices: [AVSpeechSynthesisVoice] {
+    private static func loadVoices() -> [AVSpeechSynthesisVoice] {
         let all = AVSpeechSynthesisVoice.speechVoices()
         let lang = Locale.current.language.languageCode?.identifier ?? "en"
         let matched = all.filter { $0.language.hasPrefix(lang) }
