@@ -7,6 +7,6 @@ struct CrazyWorkApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [WorkoutSession.self, ExerciseSet.self])
+        .modelContainer(for: [WorkoutSession.self, ExerciseSet.self, SavedWorkout.self])
     }
 }

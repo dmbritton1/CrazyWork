@@ -2,8 +2,8 @@ import Foundation
 
 /// A builder row: one exercise repeated for `sets` sets of `target` each
 /// (target is reps, or seconds for a timed hold).
-struct WorkoutEntry: Identifiable, Equatable {
-    let id = UUID()
+struct WorkoutEntry: Identifiable, Equatable, Codable {
+    var id = UUID()
     var exerciseID: String
     var sets: Int
     var target: Int
