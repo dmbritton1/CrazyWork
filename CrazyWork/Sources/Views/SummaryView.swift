@@ -62,7 +62,8 @@ struct SummaryView: View {
         let renderer = ImageRenderer(content: WorkoutShareCard(
             date: Date(), exercises: exercisesText,
             totalReps: totalReps, totalHoldSeconds: totalHoldSeconds,
-            averageFormPct: averageFormPct))
+            averageFormPct: averageFormPct)
+            .environment(\.colorScheme, .dark)) // shared card is always the branded dark card
         renderer.scale = UIScreen.main.scale
         guard let ui = renderer.uiImage else { return nil }
         return Image(uiImage: ui)
@@ -70,15 +71,15 @@ struct SummaryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Workout Complete").font(.largeTitle.bold())
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                Text("Workout Complete").typography(Typography.displayLg).foregroundStyle(Palette.ink)
 
                 if !rows.isEmpty {
                     chartCard("Volume per set") {
                         Chart(rows) { row in
                             BarMark(x: .value("Set", row.setLabel),
                                     y: .value("Done", row.completed))
-                                .foregroundStyle(by: .value("Exercise", row.exercise))
+                                .foregroundStyle(Palette.brandRed)
                         }
                     }
 
@@ -86,48 +87,55 @@ struct SummaryView: View {
                         Chart(rows) { row in
                             BarMark(x: .value("Set", row.setLabel),
                                     y: .value("Form %", row.formPct))
-                                .foregroundStyle(.green)
+                                .foregroundStyle(Palette.accentAqua)
                         }
                         .chartYScale(domain: 0...100)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
                     ForEach(rows) { row in
                         HStack {
-                            VStack(alignment: .leading) {
-                                Text("\(row.setLabel) · \(row.exercise)").font(.subheadline.weight(.medium))
-                                Text(row.detail).font(.caption).foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text("\(row.setLabel) · \(row.exercise)")
+                                    .typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
+                                Text(row.detail).typography(Typography.bodySm).foregroundStyle(Palette.mute)
                             }
                             Spacer()
-                            Text("\(Int(row.formPct))% form").font(.caption).foregroundStyle(.secondary)
+                            Text("\(Int(row.formPct))% form")
+                                .typography(Typography.bodySm).foregroundStyle(Palette.body)
                         }
+                        .card()
                     }
                 }
 
                 if let image = shareImage() {
                     ShareLink(item: image,
                               preview: SharePreview("My CrazyWork workout", image: image)) {
-                        Label("Share", systemImage: "square.and.arrow.up")
+                        Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(PrimaryButtonStyle())
                 }
 
                 Button("Done") { dismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(SecondaryButtonStyle())
                     .frame(maxWidth: .infinity)
             }
-            .padding()
+            .padding(Spacing.lg)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
+        .background(Palette.canvas)
     }
 
     @ViewBuilder
     private func chartCard<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            content().frame(height: 180)
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(title).typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
+            content()
+                .frame(height: 180)
+                .chartXAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
+                .chartYAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
         }
+        .card()
     }
 }

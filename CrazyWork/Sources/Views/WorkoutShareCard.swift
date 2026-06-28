@@ -2,7 +2,8 @@ import SwiftUI
 import ChallengeCore
 
 /// A compact, fixed-width card rendered to an image for sharing — not shown
-/// inline in the app.
+/// inline in the app. Always rendered in the branded dark look (the caller forces
+/// `.colorScheme = .dark`).
 struct WorkoutShareCard: View {
     let date: Date
     let exercises: String      // "Push-up · Squat · Plank"
@@ -11,30 +12,31 @@ struct WorkoutShareCard: View {
     let averageFormPct: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             HStack {
-                Text("CrazyWork").font(.headline.bold())
+                Text("CrazyWork").typography(Typography.headingSm).foregroundStyle(Palette.ink)
                 Spacer()
                 Text(date, format: .dateTime.month().day().year())
-                    .font(.caption).foregroundStyle(.secondary)
+                    .typography(Typography.captionMd).foregroundStyle(Palette.mute)
             }
-            Text(exercises).font(.subheadline).foregroundStyle(.secondary)
-            HStack(spacing: 20) {
+            Text(exercises).typography(Typography.bodySm).foregroundStyle(Palette.mute)
+            HStack(spacing: Spacing.xl) {
                 stat("\(totalReps)", "reps")
                 stat(LiveWorkoutView.clock(totalHoldSeconds), "held")
                 stat("\(averageFormPct)%", "form")
             }
         }
-        .padding(20)
+        .padding(Spacing.xl)
         .frame(width: 340, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(Palette.surface)
+        .overlay(RoundedRectangle(cornerRadius: Radii.xl).stroke(Palette.hairline, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: Radii.xl))
     }
 
     private func stat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title3.bold())
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(value).typography(Typography.headingXl).foregroundStyle(Palette.brandRed)
+            Text(label).typography(Typography.captionSm).foregroundStyle(Palette.mute)
         }
     }
 }
