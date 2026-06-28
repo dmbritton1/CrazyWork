@@ -33,6 +33,41 @@ struct SummaryView: View {
         }
     }
 
+    private var totalReps: Int {
+        results.filter { $0.goalUnit == .reps }.reduce(0) { $0 + Int($1.completed) }
+    }
+
+    private var totalHoldSeconds: Double {
+        results.filter { $0.goalUnit == .seconds }.reduce(0) { $0 + $1.completed }
+    }
+
+    private var averageFormPct: Int {
+        let scored = results.filter { $0.completed > 0 }
+        guard !scored.isEmpty else { return 0 }
+        let mean = scored.reduce(0.0) { $0 + $1.averageFormScore } / Double(scored.count)
+        return Int((mean * 100).rounded())
+    }
+
+    private var exercisesText: String {
+        var seen = Set<String>()
+        var names: [String] = []
+        for r in results {
+            let name = ExerciseRegistry.displayName(for: r.exerciseID)
+            if seen.insert(name).inserted { names.append(name) }
+        }
+        return names.joined(separator: " · ")
+    }
+
+    @MainActor private func shareImage() -> Image? {
+        let renderer = ImageRenderer(content: WorkoutShareCard(
+            date: Date(), exercises: exercisesText,
+            totalReps: totalReps, totalHoldSeconds: totalHoldSeconds,
+            averageFormPct: averageFormPct))
+        renderer.scale = UIScreen.main.scale
+        guard let ui = renderer.uiImage else { return nil }
+        return Image(uiImage: ui)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -68,6 +103,14 @@ struct SummaryView: View {
                             Text("\(Int(row.formPct))% form").font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                }
+
+                if let image = shareImage() {
+                    ShareLink(item: image,
+                              preview: SharePreview("My CrazyWork workout", image: image)) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                    .frame(maxWidth: .infinity)
                 }
 
                 Button("Done") { dismiss() }
