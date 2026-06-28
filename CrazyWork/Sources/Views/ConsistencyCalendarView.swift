@@ -23,8 +23,10 @@ struct ConsistencyCalendarView: View {
     }
 
     private func color(for day: Date?) -> Color {
-        guard let day, day <= calendar.startOfDay(for: Date()) else { return .clear }
-        return workoutDays.contains(day) ? Color.accentColor : Color.gray.opacity(0.2)
+        let today = calendar.startOfDay(for: Date())
+        guard let day, day <= today else { return .clear }
+        if calendar.isDate(day, inSameDayAs: today) && workoutDays.contains(day) { return Palette.accentAqua }
+        return workoutDays.contains(day) ? Palette.brandRed : Palette.surfaceCard
     }
 
     /// Columns of 7 days (week start..+6), oldest week first, ending this week.

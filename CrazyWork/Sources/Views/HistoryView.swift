@@ -5,11 +5,27 @@ struct HistoryView: View {
     @Query(sort: \WorkoutSession.startedAt, order: .reverse) private var sessions: [WorkoutSession]
 
     var body: some View {
-        List(sessions) { session in
-            VStack(alignment: .leading) {
-                Text(session.startedAt, style: .date)
-                Text(summary(session))
-                    .font(.caption).foregroundStyle(.secondary)
+        ZStack {
+            Palette.canvas.ignoresSafeArea()
+            if sessions.isEmpty {
+                ContentUnavailableView("No history yet",
+                                       systemImage: "clock.arrow.circlepath",
+                                       description: Text("Finished workouts show up here."))
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: Spacing.md) {
+                        ForEach(sessions) { session in
+                            VStack(alignment: .leading, spacing: Spacing.xs) {
+                                Text(session.startedAt, style: .date)
+                                    .typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
+                                Text(summary(session))
+                                    .typography(Typography.bodySm).foregroundStyle(Palette.mute)
+                            }
+                            .card()
+                        }
+                    }
+                    .padding(Spacing.lg)
+                }
             }
         }
         .navigationTitle("History")

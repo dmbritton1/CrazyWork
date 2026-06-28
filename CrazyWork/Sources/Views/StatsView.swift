@@ -8,7 +8,8 @@ struct StatsView: View {
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
 
     var body: some View {
-        Group {
+        ZStack {
+            Palette.canvas.ignoresSafeArea()
             if sessions.isEmpty {
                 ContentUnavailableView("No workouts yet",
                                        systemImage: "chart.xyaxis.line",
@@ -26,20 +27,20 @@ struct StatsView: View {
 
     private func content(_ stats: ProgressStats) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: Spacing.xl) {
                 cards(stats)
                 trends(stats)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Consistency").font(.headline)
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    Text("Consistency").typography(Typography.headingMd).foregroundStyle(Palette.ink)
                     ConsistencyCalendarView(workoutDays: stats.workoutDays)
                 }
             }
-            .padding()
+            .padding(Spacing.lg)
         }
     }
 
     private func cards(_ stats: ProgressStats) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Spacing.md) {
             statCard("Workouts", "\(stats.totalWorkouts)", "figure.run")
             statCard("Current streak", "\(stats.currentStreak)d", "flame.fill")
             statCard("Longest streak", "\(stats.longestStreak)d", "trophy.fill")
@@ -50,30 +51,31 @@ struct StatsView: View {
     }
 
     private func statCard(_ title: String, _ value: String, _ icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title2.bold())
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Label(title, systemImage: icon).typography(Typography.captionMd).foregroundStyle(Palette.mute)
+            Text(value).typography(Typography.headingXl).foregroundStyle(Palette.ink)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .card(surface: Palette.surfaceElevated)
     }
 
     private func trends(_ stats: ProgressStats) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            chartCard("Reps per workout") {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            chartCard("Reps per workout", color: Palette.brandRed) {
                 Chart(stats.summaries, id: \.date) { s in
                     LineMark(x: .value("Date", s.date), y: .value("Reps", s.reps))
+                        .foregroundStyle(Palette.brandRed)
                 }
             }
-            chartCard("Hold seconds per workout") {
+            chartCard("Hold seconds per workout", color: Palette.accentAqua) {
                 Chart(stats.summaries, id: \.date) { s in
                     LineMark(x: .value("Date", s.date), y: .value("Seconds", s.holdSeconds))
+                        .foregroundStyle(Palette.accentAqua)
                 }
             }
-            chartCard("Form % per workout") {
+            chartCard("Form % per workout", color: Palette.accentGreen) {
                 Chart(stats.summaries, id: \.date) { s in
                     LineMark(x: .value("Date", s.date), y: .value("Form %", s.formScore * 100))
+                        .foregroundStyle(Palette.accentGreen)
                 }
                 .chartYScale(domain: 0...100)
             }
@@ -81,11 +83,16 @@ struct StatsView: View {
     }
 
     @ViewBuilder
-    private func chartCard<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            content().frame(height: 160)
+    private func chartCard<Content: View>(_ title: String, color: Color,
+                                          @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text(title).typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
+            content()
+                .frame(height: 160)
+                .chartXAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
+                .chartYAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
         }
+        .card()
     }
 
     static func clock(_ seconds: Int) -> String {

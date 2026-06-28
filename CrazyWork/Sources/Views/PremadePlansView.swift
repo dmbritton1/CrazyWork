@@ -12,41 +12,58 @@ struct PremadePlansView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if !saved.isEmpty {
-                    Section("My Workouts") {
-                        ForEach(saved) { workout in
-                            Button { onChoose(workout.asPlan) } label: { card(workout.asPlan) }
-                                .buttonStyle(.plain)
+            ZStack {
+                Palette.canvas.ignoresSafeArea()
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: Spacing.lg) {
+                        Text("Plans").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                            .padding(.top, Spacing.sm)
+
+                        if !saved.isEmpty {
+                            sectionHeader("MY WORKOUTS")
+                            ForEach(saved) { workout in
+                                planCard(workout.asPlan, onDelete: { modelContext.delete(workout) })
+                            }
                         }
-                        .onDelete { offsets in
-                            for i in offsets { modelContext.delete(saved[i]) }
+
+                        sectionHeader("PLANS")
+                        ForEach(PremadePlanCatalog.all) { plan in
+                            planCard(plan, onDelete: nil)
                         }
                     }
-                }
-                Section("Plans") {
-                    ForEach(PremadePlanCatalog.all) { plan in
-                        Button { onChoose(plan) } label: { card(plan) }
-                            .buttonStyle(.plain)
-                    }
+                    .padding(Spacing.lg)
                 }
             }
-            .navigationTitle("Plans")
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
-    private func card(_ plan: PremadePlan) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(plan.name).font(.headline)
+    private func sectionHeader(_ text: String) -> some View {
+        Text(text).typography(Typography.bodySmStrong).foregroundStyle(Palette.mute)
+            .padding(.top, Spacing.sm)
+    }
+
+    private func planCard(_ plan: PremadePlan, onDelete: (() -> Void)?) -> some View {
+        Button { onChoose(plan) } label: { card(plan, onDelete: onDelete) }
+            .buttonStyle(.plain)
+    }
+
+    private func card(_ plan: PremadePlan, onDelete: (() -> Void)?) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(alignment: .top) {
+                Text(plan.name).typography(Typography.headingSm).foregroundStyle(Palette.ink)
                 Spacer()
-                Label(timeText(plan), systemImage: "clock")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                Badge(text: timeText(plan), style: .aquaSoft)
+                if let onDelete {
+                    Button(action: onDelete) { Image(systemName: "trash").foregroundStyle(Palette.mute) }
+                        .buttonStyle(.plain)
+                        .padding(.leading, Spacing.xs)
+                }
             }
-            Text(plan.summary).font(.subheadline).foregroundStyle(.secondary)
-            Text(exerciseSummary(plan)).font(.caption).foregroundStyle(.tertiary)
+            Text(plan.summary).typography(Typography.bodySm).foregroundStyle(Palette.mute)
+            Text(exerciseSummary(plan)).typography(Typography.captionMd).foregroundStyle(Palette.stone)
         }
-        .padding(.vertical, 6)
+        .card()
     }
 
     private func timeText(_ plan: PremadePlan) -> String {
