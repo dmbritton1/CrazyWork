@@ -30,7 +30,6 @@ struct LiveWorkoutView: View {
 
             if coordinator.phase == .finished {
                 SummaryView(results: coordinator.results)
-                    .onAppear { saveIfNeeded() }
             } else {
                 if cameraDenied {
                     deniedView
@@ -169,6 +168,7 @@ struct LiveWorkoutView: View {
             if coordinator.phase == .finished { break }
         }
         pipeline.stop() // camera off once the workout completes
+        if coordinator.phase == .finished { saveIfNeeded() } // persist the moment it ends
     }
 
     private func saveIfNeeded() {
@@ -185,6 +185,10 @@ struct LiveWorkoutView: View {
         }
         session.endedAt = Date()
         modelContext.insert(session)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            assertionFailure("Failed to save workout: \(error)") // don't silently lose history
+        }
     }
 }
