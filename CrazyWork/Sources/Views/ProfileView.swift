@@ -28,6 +28,10 @@ struct ProfileView: View {
     @AppStorage("displayName") private var displayName = "Athlete"
     @AppStorage("workoutAudioEnabled") private var audioEnabled = true
     @AppStorage("appearance") private var appearance = AppearanceMode.system
+    @AppStorage("skeletonColor") private var skeletonColor = SkeletonColor.green
+    @AppStorage("skeletonThickness") private var skeletonThickness = SkeletonThickness.medium
+    @AppStorage("skeletonShowJoints") private var skeletonShowJoints = true
+    @AppStorage("skeletonShowSkeleton") private var skeletonShowSkeleton = true
     @Query private var sessions: [WorkoutSession]
 
     private var stats: ProgressStats {
@@ -53,8 +57,33 @@ struct ProfileView: View {
                     }
                 }
             }
+            Section("Pose overlay") {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(OverlayPreset.all) { preset in
+                            Button(preset.id) { apply(preset) }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                }
+                Picker("Color", selection: $skeletonColor) {
+                    ForEach(SkeletonColor.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                Picker("Thickness", selection: $skeletonThickness) {
+                    ForEach(SkeletonThickness.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                Toggle("Show joints", isOn: $skeletonShowJoints)
+                Toggle("Show skeleton", isOn: $skeletonShowSkeleton)
+            }
         }
         .navigationTitle("Profile")
+    }
+
+    private func apply(_ preset: OverlayPreset) {
+        skeletonColor = preset.color
+        skeletonThickness = preset.thickness
+        skeletonShowJoints = preset.showJoints
+        skeletonShowSkeleton = preset.showSkeleton
     }
 
     private func stat(_ title: String, _ value: String) -> some View {
