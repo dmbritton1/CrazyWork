@@ -11,6 +11,8 @@ struct RootView: View {
 
     private enum Tab { case workout, plans, stats, history, profile }
 
+    init() { ThemeAppearance.configure() }
+
     var body: some View {
         TabView(selection: $selection) {
             BuildWorkoutView(entries: $entries, restSeconds: $restSeconds)
@@ -37,6 +39,7 @@ struct RootView: View {
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
                 .tag(Tab.profile)
         }
+        .tint(Palette.onDark)
         .preferredColorScheme(appearance.colorScheme)
     }
 }
