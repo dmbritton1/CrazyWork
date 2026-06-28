@@ -13,11 +13,11 @@ struct ExerciseTile: View {
     static func symbol(for id: String) -> String {
         switch id {
         case "pushup":      return "figure.strengthtraining.functional"
-        case "squat":       return "figure.cross.training"
-        case "lunge":       return "figure.step.training"
-        case "plank":       return "figure.core.training"
-        case "situp":       return "figure.core.training"
-        case "glutebridge": return "figure.flexibility"
+        case "squat":       return "figure.strengthtraining.traditional" // barbell squat stance
+        case "lunge":       return "figure.step.training"                // stepping/lunge motion
+        case "plank":       return "figure.core.training"                // prone hold
+        case "situp":       return "figure.cooldown"                     // floor crunch (distinct from plank)
+        case "glutebridge": return "figure.pilates"                      // supine mat/hip work
         default:            return "figure.strengthtraining.traditional"
         }
     }

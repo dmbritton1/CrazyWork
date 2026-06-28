@@ -191,10 +191,10 @@ struct LiveWorkoutView: View {
         modelContext.insert(session)
         do {
             try modelContext.save()
+            onComplete?() // advance the path only when the session actually persisted
         } catch {
             assertionFailure("Failed to save workout: \(error)") // don't silently lose history
         }
-        onComplete?() // advance the path when this was today's prescribed workout
 
         guard healthSyncEnabled else { return }
         let results = coordinator.results
