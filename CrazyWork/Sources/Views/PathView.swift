@@ -7,6 +7,7 @@ import SwiftData
 struct PathView: View {
     @AppStorage("pathIndex") private var pathIndex = 0
     @AppStorage("pathLastCompletedDay") private var pathLastCompletedDay = Int.min
+    @State private var scrollY: CGFloat = 0
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
 
     private let rowHeight: CGFloat = 152   // generous vertical spread between nodes
@@ -34,6 +35,15 @@ struct PathView: View {
     var body: some View {
         ZStack {
             Palette.canvas.ignoresSafeArea()
+            GeometryReader { vp in
+                redGlow
+                    .position(x: vp.size.width / 2
+                                + CGFloat(sin(Double(scrollY) / 150)) * vp.size.width * 0.34,
+                              y: vp.size.height * 0.42
+                                + CGFloat(sin(Double(scrollY) / 260)) * vp.size.height * 0.16)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     hero
@@ -43,8 +53,21 @@ struct PathView: View {
                 }
                 .padding(.bottom, Spacing.section)
             }
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in
+                scrollY = y
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    /// A soft red gradient blur that rides along with the scroll and weaves
+    /// side to side, drifting around the path behind the dots.
+    private var redGlow: some View {
+        RadialGradient(colors: [Palette.brandRed.opacity(0.5),
+                                Palette.accentRedDeep.opacity(0.22), .clear],
+                       center: .center, startRadius: 0, endRadius: 170)
+            .frame(width: 340, height: 340)
+            .blur(radius: 70)
     }
 
     private var hero: some View {
@@ -122,12 +145,13 @@ struct PathView: View {
         GeometryReader { geo in
             let cx = geo.size.width / 2
             let amp = min(cx - 78, 124)   // keep dots + labels clear of the edges
+            let height = rowHeight * CGFloat(windowIndices.count)
             let points = windowIndices.indices.map { local in
                 CGPoint(x: cx + wave(windowIndices[local]) * amp,
                         y: rowHeight / 2 + CGFloat(local) * rowHeight)
             }
             ZStack(alignment: .topLeading) {
-                flowLine(points)
+                flowLine(height: height, cx: cx)
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
                     nodeView(nodeIndex).position(points[local])
                 }
@@ -137,40 +161,41 @@ struct PathView: View {
         .padding(.top, Spacing.md)
     }
 
-    /// A smooth abstract wave behind the dots: one soft red ribbon that loosely
-    /// tracks the node positions, with two fainter offset echoes for depth.
-    private func flowLine(_ points: [CGPoint]) -> some View {
-        let path = smoothPath(points)
+    /// An abstract red ribbon that meanders on its own — wider amplitude and a
+    /// different rhythm than the dots, so it weaves around them rather than
+    /// connecting them — with two fainter offset echoes for depth.
+    private func flowLine(height: CGFloat, cx: CGFloat) -> some View {
+        let amp = min(cx - 24, 172)   // swings wider than the dots
+        let path = abstractPath(height: height, cx: cx, amp: amp)
         return ZStack {
             path.stroke(Palette.hairlineStrong,
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: 26).opacity(0.6)
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: 32).opacity(0.5)
             path.stroke(Palette.hairlineStrong,
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: -26).opacity(0.6)
-            path.stroke(Palette.accentRedDeep.opacity(0.5),
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: -36).opacity(0.4)
+            path.stroke(Palette.accentRedDeep.opacity(0.45),
                         style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         }
     }
 
-    /// Builds a smooth curve through the points (midpoint quadratic smoothing),
-    /// extended past the first/last so the ribbon flows off the top and bottom.
-    private func smoothPath(_ raw: [CGPoint]) -> Path {
-        var pts = raw
-        if pts.count >= 2 {
-            let f = pts[0], f2 = pts[1]
-            pts.insert(CGPoint(x: 2 * f.x - f2.x, y: f.y - rowHeight), at: 0)
-            let l = pts[pts.count - 1], l2 = pts[pts.count - 2]
-            pts.append(CGPoint(x: 2 * l.x - l2.x, y: l.y + rowHeight))
-        }
-        return Path { p in
-            guard pts.count > 1 else { return }
-            p.move(to: pts[0])
-            for i in 1..<pts.count {
-                let prev = pts[i - 1], cur = pts[i]
-                let mid = CGPoint(x: (prev.x + cur.x) / 2, y: (prev.y + cur.y) / 2)
-                p.addQuadCurve(to: mid, control: prev)
+    /// A free-flowing curve sampled down the full height from `ribbonWave`,
+    /// extended past the top/bottom so the ribbon runs off both edges.
+    private func abstractPath(height: CGFloat, cx: CGFloat, amp: CGFloat) -> Path {
+        Path { p in
+            var y: CGFloat = -rowHeight
+            var first = true
+            while y <= height + rowHeight {
+                let pt = CGPoint(x: cx + ribbonWave(y) * amp, y: y)
+                if first { p.move(to: pt); first = false } else { p.addLine(to: pt) }
+                y += 14
             }
-            p.addLine(to: pts[pts.count - 1])
         }
+    }
+
+    /// The ribbon's own meander as a function of vertical position (not node
+    /// index), so it is decoupled from where the dots sit.
+    private func ribbonWave(_ y: CGFloat) -> CGFloat {
+        let v = sin(Double(y) * 0.011 + 0.6) * 0.62 + sin(Double(y) * 0.027 + 2.3) * 0.52
+        return CGFloat(max(-1.15, min(1.15, v)))
     }
 
     /// Organic horizontal placement in [-1, 1] as a function of the absolute
