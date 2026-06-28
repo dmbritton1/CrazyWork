@@ -99,6 +99,47 @@ struct ExerciseAnalyzerTests {
         #expect(a.progress == 1)
     }
 
+    @Test("SitupAnalyzer counts one rep from torso flexion")
+    func situpCounts() {
+        var a = SitupAnalyzer()
+        let make: (Double, TimeInterval) -> PoseFrame = {
+            self.angleFrame($0, t: $1,
+                            left: (.leftShoulder, .leftHip, .leftKnee),
+                            right: (.rightShoulder, .rightHip, .rightKnee))
+        }
+        for f in cycle(make, start: 0) { _ = a.process(f) }
+        #expect(a.progress == 1)
+    }
+
+    @Test("GluteBridgeAnalyzer counts one rep from hip extension")
+    func gluteBridgeCounts() {
+        var a = GluteBridgeAnalyzer()
+        let make: (Double, TimeInterval) -> PoseFrame = {
+            self.angleFrame($0, t: $1,
+                            left: (.leftShoulder, .leftHip, .leftKnee),
+                            right: (.rightShoulder, .rightHip, .rightKnee))
+        }
+        for f in cycle(make, start: 0) { _ = a.process(f) }
+        #expect(a.progress == 1)
+    }
+
+    @Test("GluteBridgeAnalyzer ignores a shallow bridge that never reaches lockout")
+    func gluteBridgeIgnoresShallow() {
+        var a = GluteBridgeAnalyzer()
+        let make: (Double, TimeInterval) -> PoseFrame = {
+            self.angleFrame($0, t: $1,
+                            left: (.leftShoulder, .leftHip, .leftKnee),
+                            right: (.rightShoulder, .rightHip, .rightKnee))
+        }
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        for _ in 0..<8 { frames.append(make(120, t)); t += 0.1 } // on the floor (down)
+        for _ in 0..<8 { frames.append(make(145, t)); t += 0.1 } // partial lift, below the 155 lockout
+        for _ in 0..<8 { frames.append(make(120, t)); t += 0.1 } // back down
+        for f in frames { _ = a.process(f) }
+        #expect(a.progress == 0)
+    }
+
     @Test("LungeAnalyzer counts a one-legged dip (minimum combination)")
     func lungeCounts() {
         var a = LungeAnalyzer()
@@ -228,8 +269,11 @@ struct ExerciseAnalyzerTests {
     func registry() {
         #expect(ExerciseRegistry.makeAnalyzer(for: "pushup")?.definition.goalUnit == .reps)
         #expect(ExerciseRegistry.makeAnalyzer(for: "plank")?.definition.goalUnit == .seconds)
+        #expect(ExerciseRegistry.makeAnalyzer(for: "situp")?.definition.goalUnit == .reps)
+        #expect(ExerciseRegistry.makeAnalyzer(for: "glutebridge")?.definition.goalUnit == .reps)
         #expect(ExerciseRegistry.makeAnalyzer(for: "moonwalk") == nil)
-        #expect(Set(ExerciseRegistry.all.map(\.id)) == ["pushup", "squat", "lunge", "plank"])
+        #expect(Set(ExerciseRegistry.all.map(\.id))
+                == ["pushup", "squat", "lunge", "plank", "situp", "glutebridge"])
     }
 
     @Test("registry lookups resolve ids, with fallbacks for unknown ones")

@@ -326,6 +326,66 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     }
 }
 
+/// Sit-ups: torso-flexion angle (shoulder·hip·knee, both sides averaged) drives
+/// reps. Lying flat is extended; crunching up is bent. Form coaching deferred.
+public struct SitupAnalyzer: ExerciseAnalyzer {
+    public let definition = ExerciseDefinition(id: "situp", displayName: "Sit-up", goalUnit: .reps)
+    private let config: RepCounterConfig
+    private var counter: RepCounter
+
+    public var progress: Double { Double(counter.count) }
+
+    public init(minConfidence: Double = 0.5) {
+        self.config = RepCounterConfig(
+            upThreshold: 130, downThreshold: 90, minRangeOfMotion: 40,
+            minConfidence: minConfidence,
+            repJoints: [
+                JointTriple(.leftShoulder, .leftHip, .leftKnee),
+                JointTriple(.rightShoulder, .rightHip, .rightKnee),
+            ])
+        self.counter = RepCounter(config: config)
+    }
+
+    public mutating func process(_ frame: PoseFrame) -> AnalyzerResult {
+        let update = counter.process(frame)
+        return AnalyzerResult(progress: Double(update.count), didAdvance: update.didCompleteRep,
+                              poseVisible: update.poseVisible, formCue: nil)
+    }
+
+    public mutating func reset() { counter = RepCounter(config: config) }
+}
+
+/// Glute bridges: hip-extension angle (shoulder·hip·knee, both sides averaged)
+/// drives reps. Hips on the floor is bent; the bridge is extended. The range of
+/// motion is narrow, so these thresholds are the on-device tuning knob. Form
+/// coaching deferred.
+public struct GluteBridgeAnalyzer: ExerciseAnalyzer {
+    public let definition = ExerciseDefinition(id: "glutebridge", displayName: "Glute Bridge", goalUnit: .reps)
+    private let config: RepCounterConfig
+    private var counter: RepCounter
+
+    public var progress: Double { Double(counter.count) }
+
+    public init(minConfidence: Double = 0.5) {
+        self.config = RepCounterConfig(
+            upThreshold: 155, downThreshold: 130, minRangeOfMotion: 25,
+            minConfidence: minConfidence,
+            repJoints: [
+                JointTriple(.leftShoulder, .leftHip, .leftKnee),
+                JointTriple(.rightShoulder, .rightHip, .rightKnee),
+            ])
+        self.counter = RepCounter(config: config)
+    }
+
+    public mutating func process(_ frame: PoseFrame) -> AnalyzerResult {
+        let update = counter.process(frame)
+        return AnalyzerResult(progress: Double(update.count), didAdvance: update.didCompleteRep,
+                              poseVisible: update.poseVisible, formCue: nil)
+    }
+
+    public mutating func reset() { counter = RepCounter(config: config) }
+}
+
 /// Maps an exercise id to a fresh analyzer, and lists all selectable exercises.
 public enum ExerciseRegistry {
     public static let all: [ExerciseDefinition] = [
@@ -333,6 +393,8 @@ public enum ExerciseRegistry {
         SquatAnalyzer().definition,
         LungeAnalyzer().definition,
         PlankAnalyzer().definition,
+        SitupAnalyzer().definition,
+        GluteBridgeAnalyzer().definition,
     ]
 
     /// The definition for an exercise id, or `nil` if unknown.
@@ -356,6 +418,8 @@ public enum ExerciseRegistry {
         case "squat": return SquatAnalyzer()
         case "lunge": return LungeAnalyzer()
         case "plank": return PlankAnalyzer()
+        case "situp": return SitupAnalyzer()
+        case "glutebridge": return GluteBridgeAnalyzer()
         default: return nil
         }
     }
