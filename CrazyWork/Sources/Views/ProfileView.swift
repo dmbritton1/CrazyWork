@@ -36,6 +36,7 @@ struct ProfileView: View {
     @AppStorage("voiceID") private var voiceID = ""
     @Query private var sessions: [WorkoutSession]
     @State private var previewSynth = AVSpeechSynthesizer()
+    @State private var speechEnder = SpeechSessionEnder()
 
     private var stats: ProgressStats {
         ProgressStats(summaries: sessions.map(\.summary))
@@ -110,6 +111,7 @@ struct ProfileView: View {
     private func previewVoice() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.duckOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
+        previewSynth.delegate = speechEnder
         let utterance = AVSpeechUtterance(string: "Three. Nice work!")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         if !voiceID.isEmpty, let voice = AVSpeechSynthesisVoice(identifier: voiceID) {
@@ -123,5 +125,13 @@ struct ProfileView: View {
             Text(value).font(.title2.bold())
             Text(title).font(.caption).foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Releases the audio session once a voice preview finishes, so other apps'
+/// audio stops being ducked the moment the sample ends.
+private final class SpeechSessionEnder: NSObject, AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
