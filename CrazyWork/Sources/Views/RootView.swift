@@ -7,8 +7,9 @@ struct RootView: View {
     @State private var entries: [WorkoutEntry] = []
     @State private var restSeconds: Int = 30
     @State private var selection: Tab = .workout
+    @AppStorage("appearance") private var appearance = AppearanceMode.system
 
-    private enum Tab { case workout, plans, stats, history }
+    private enum Tab { case workout, plans, stats, history, profile }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -31,6 +32,11 @@ struct RootView: View {
             NavigationStack { HistoryView() }
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
                 .tag(Tab.history)
+
+            NavigationStack { ProfileView() }
+                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+                .tag(Tab.profile)
         }
+        .preferredColorScheme(appearance.colorScheme)
     }
 }
