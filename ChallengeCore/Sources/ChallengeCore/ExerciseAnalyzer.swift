@@ -8,11 +8,14 @@ public struct ExerciseDefinition: Sendable, Equatable {
     public let id: String
     public let displayName: String
     public let goalUnit: GoalUnit
+    /// Metabolic equivalent for calorie estimation.
+    public let met: Double
 
-    public init(id: String, displayName: String, goalUnit: GoalUnit) {
+    public init(id: String, displayName: String, goalUnit: GoalUnit, met: Double) {
         self.id = id
         self.displayName = displayName
         self.goalUnit = goalUnit
+        self.met = met
     }
 }
 
@@ -45,7 +48,7 @@ public protocol ExerciseAnalyzer {
 /// Push-ups: elbow angle drives reps; body-line (shoulder·hip·ankle) drives the
 /// sag/pike form cue.
 public struct PushupAnalyzer: ExerciseAnalyzer {
-    public let definition = ExerciseDefinition(id: "pushup", displayName: "Push-up", goalUnit: .reps)
+    public let definition = ExerciseDefinition(id: "pushup", displayName: "Push-up", goalUnit: .reps, met: 3.8)
     private let config: RepCounterConfig
     private var counter: RepCounter
     private let form: FormEvaluator
@@ -76,7 +79,7 @@ public struct PushupAnalyzer: ExerciseAnalyzer {
 /// Squats: knee angle (hip·knee·ankle, both legs averaged) drives reps. Form
 /// coaching deferred.
 public struct SquatAnalyzer: ExerciseAnalyzer {
-    public let definition = ExerciseDefinition(id: "squat", displayName: "Squat", goalUnit: .reps)
+    public let definition = ExerciseDefinition(id: "squat", displayName: "Squat", goalUnit: .reps, met: 5.0)
     private let config: RepCounterConfig
     private var counter: RepCounter
 
@@ -104,7 +107,7 @@ public struct SquatAnalyzer: ExerciseAnalyzer {
 /// Lunges: the more-bent knee drives reps (`.minimum` combination), so either
 /// leg's dip counts and alternating legs just works. Form coaching deferred.
 public struct LungeAnalyzer: ExerciseAnalyzer {
-    public let definition = ExerciseDefinition(id: "lunge", displayName: "Lunge", goalUnit: .reps)
+    public let definition = ExerciseDefinition(id: "lunge", displayName: "Lunge", goalUnit: .reps, met: 4.0)
     private let config: RepCounterConfig
     private var counter: RepCounter
 
@@ -163,7 +166,7 @@ public struct LungeAnalyzer: ExerciseAnalyzer {
 /// All three gates (orientation, arm-support, form) use the same smoothed +
 /// hysteresis recipe as the rep counter, so none reintroduce single-frame flicker.
 public struct PlankAnalyzer: ExerciseAnalyzer {
-    public let definition = ExerciseDefinition(id: "plank", displayName: "Plank", goalUnit: .seconds)
+    public let definition = ExerciseDefinition(id: "plank", displayName: "Plank", goalUnit: .seconds, met: 3.3)
     private let form: FormEvaluator
     private let minConfidence: Double
     /// Tilt from horizontal (degrees) allowed to *enter* the hold.
@@ -329,7 +332,7 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
 /// Sit-ups: torso-flexion angle (shoulder·hip·knee, both sides averaged) drives
 /// reps. Lying flat is extended; crunching up is bent. Form coaching deferred.
 public struct SitupAnalyzer: ExerciseAnalyzer {
-    public let definition = ExerciseDefinition(id: "situp", displayName: "Sit-up", goalUnit: .reps)
+    public let definition = ExerciseDefinition(id: "situp", displayName: "Sit-up", goalUnit: .reps, met: 3.8)
     private let config: RepCounterConfig
     private var counter: RepCounter
 
@@ -360,7 +363,7 @@ public struct SitupAnalyzer: ExerciseAnalyzer {
 /// motion is narrow, so these thresholds are the on-device tuning knob. Form
 /// coaching deferred.
 public struct GluteBridgeAnalyzer: ExerciseAnalyzer {
-    public let definition = ExerciseDefinition(id: "glutebridge", displayName: "Glute Bridge", goalUnit: .reps)
+    public let definition = ExerciseDefinition(id: "glutebridge", displayName: "Glute Bridge", goalUnit: .reps, met: 3.5)
     private let config: RepCounterConfig
     private var counter: RepCounter
 

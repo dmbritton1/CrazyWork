@@ -5,6 +5,13 @@ import Testing
 @Suite("ExerciseAnalyzer — per-exercise wrappers over the shared engine")
 struct ExerciseAnalyzerTests {
 
+    @Test("Every exercise carries a positive MET value")
+    func everyExerciseHasPositiveMET() {
+        for def in ExerciseRegistry.all {
+            #expect(def.met > 0, "\(def.id) needs a MET value")
+        }
+    }
+
     /// Frame whose angle at vertex `b` equals `deg` on both sides.
     private func angleFrame(_ deg: Double, t: TimeInterval,
                             left: (Joint, Joint, Joint), right: (Joint, Joint, Joint),
