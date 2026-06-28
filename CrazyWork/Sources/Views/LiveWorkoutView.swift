@@ -8,6 +8,7 @@ import ChallengeCore
 struct LiveWorkoutView: View {
     let plan: [PlannedSet]
     let restSeconds: Int
+    let onComplete: (() -> Void)?
     @Environment(\.modelContext) private var modelContext
     @State private var coordinator: SessionCoordinator
     @State private var pipeline = PosePipeline()
@@ -19,9 +20,10 @@ struct LiveWorkoutView: View {
     @AppStorage("workoutAudioEnabled") private var audioEnabled = true
     @AppStorage("healthSyncEnabled") private var healthSyncEnabled = false
 
-    init(plan: [PlannedSet], restSeconds: Int) {
+    init(plan: [PlannedSet], restSeconds: Int, onComplete: (() -> Void)? = nil) {
         self.plan = plan
         self.restSeconds = restSeconds
+        self.onComplete = onComplete
         _coordinator = State(initialValue: SessionCoordinator(plan: plan))
     }
 
@@ -192,6 +194,7 @@ struct LiveWorkoutView: View {
         } catch {
             assertionFailure("Failed to save workout: \(error)") // don't silently lose history
         }
+        onComplete?() // advance the path when this was today's prescribed workout
 
         guard healthSyncEnabled else { return }
         let results = coordinator.results
