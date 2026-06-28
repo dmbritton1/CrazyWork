@@ -35,6 +35,7 @@ struct ProfileView: View {
     @AppStorage("skeletonShowSkeleton") private var skeletonShowSkeleton = true
     @AppStorage("voiceID") private var voiceID = ""
     @Query private var sessions: [WorkoutSession]
+    @State private var previewSynth = AVSpeechSynthesizer()
 
     private var stats: ProgressStats {
         ProgressStats(summaries: sessions.map(\.summary))
@@ -63,6 +64,11 @@ struct ProfileView: View {
                     ForEach(voices, id: \.identifier) { voice in
                         Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
                     }
+                }
+                Button {
+                    previewVoice()
+                } label: {
+                    Label("Preview voice", systemImage: "speaker.wave.2.fill")
                 }
             }
             Section("Pose overlay") {
@@ -99,6 +105,17 @@ struct ProfileView: View {
         skeletonThickness = preset.thickness
         skeletonShowJoints = preset.showJoints
         skeletonShowSkeleton = preset.showSkeleton
+    }
+
+    private func previewVoice() {
+        try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.duckOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+        let utterance = AVSpeechUtterance(string: "Three. Nice work!")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        if !voiceID.isEmpty, let voice = AVSpeechSynthesisVoice(identifier: voiceID) {
+            utterance.voice = voice
+        }
+        previewSynth.speak(utterance)
     }
 
     private func stat(_ title: String, _ value: String) -> some View {
