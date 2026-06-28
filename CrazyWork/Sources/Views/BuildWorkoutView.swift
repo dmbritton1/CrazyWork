@@ -4,6 +4,9 @@ import ChallengeCore
 struct BuildWorkoutView: View {
     @Binding var entries: [WorkoutEntry]
     @Binding var restSeconds: Int
+    @Environment(\.modelContext) private var modelContext
+    @State private var showingSavePrompt = false
+    @State private var newName = ""
 
     private static func defaultTarget(for unit: GoalUnit) -> Int {
         switch unit {
@@ -41,8 +44,24 @@ struct BuildWorkoutView: View {
                 Section("Rest between sets") {
                     Stepper("Rest: \(restSeconds)s", value: $restSeconds, in: 0...180, step: 5)
                 }
+                Section {
+                    Button("Save workout") { showingSavePrompt = true }
+                        .disabled(entries.isEmpty)
+                }
             }
             .navigationTitle("Build Workout")
+            .alert("Save workout", isPresented: $showingSavePrompt) {
+                TextField("Name", text: $newName)
+                Button("Cancel", role: .cancel) { newName = "" }
+                Button("Save") {
+                    let name = newName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    modelContext.insert(SavedWorkout(name: name, restSeconds: restSeconds, entries: entries))
+                    newName = ""
+                }
+            } message: {
+                Text("Save this workout to load again later.")
+            }
             .safeAreaInset(edge: .bottom) {
                 NavigationLink {
                     LiveWorkoutView(plan: WorkoutPlan.expand(entries), restSeconds: restSeconds)
