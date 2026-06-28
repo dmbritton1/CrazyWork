@@ -19,18 +19,21 @@ struct RestCountdownView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text("Rest").font(.largeTitle.bold()).foregroundStyle(.white)
+        VStack(spacing: Spacing.md) {
+            Text("Rest").typography(Typography.headingLg).foregroundStyle(.white)
             Text(LiveWorkoutView.clock(Double(remaining)))
                 .font(.system(size: 64, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.white)
-            Text("Next: \(nextExercise)").foregroundStyle(.white.opacity(0.8))
+            HStack(spacing: Spacing.sm) {
+                Text("Next").typography(Typography.bodySm).foregroundStyle(.white.opacity(0.7))
+                Text(nextExercise).typography(Typography.bodyStrong).foregroundStyle(Palette.accentAquaBright)
+            }
             Button("Skip rest") { onAdvance() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
         }
-        .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(Spacing.xl)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radii.xl))
         .task {
             while remaining > 0 {
                 try? await Task.sleep(for: .seconds(1))

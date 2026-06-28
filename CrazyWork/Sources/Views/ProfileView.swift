@@ -45,65 +45,101 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                TextField("Name", text: $displayName)
-                    .font(.title3.weight(.semibold))
-                HStack {
-                    stat("Workouts", "\(stats.totalWorkouts)")
-                    Spacer()
-                    stat("Streak", "\(stats.currentStreak)d")
+        ZStack {
+            Palette.canvas.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    headerCard
+                    settingsCard
+                    if HKHealthStore.isHealthDataAvailable() { healthCard }
+                    poseOverlayCard
                 }
+                .padding(Spacing.lg)
             }
-            Section("Settings") {
-                Toggle("Sound & voice", isOn: $audioEnabled)
-                Picker("Appearance", selection: $appearance) {
-                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                Picker("Voice", selection: $voiceID) {
-                    Text("Default").tag("")
-                    ForEach(voices, id: \.identifier) { voice in
-                        Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
-                    }
-                }
-                Button {
-                    previewVoice()
-                } label: {
-                    Label("Preview voice", systemImage: "speaker.wave.2.fill")
-                }
-            }
-            if HKHealthStore.isHealthDataAvailable() {
-                Section("Apple Health") {
-                    Toggle("Connect Apple Health", isOn: $healthSyncEnabled)
-                        .onChange(of: healthSyncEnabled) { _, isOn in
-                            if isOn {
-                                Task { try? await HealthStore.shared.requestAuthorization() }
-                            }
-                        }
-                }
-            }
-            Section("Pose overlay") {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(OverlayPreset.all) { preset in
-                            Button(preset.id) { apply(preset) }
-                                .buttonStyle(.bordered)
-                        }
-                    }
-                }
-                Picker("Color", selection: $skeletonColor) {
-                    ForEach(SkeletonColor.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                Picker("Thickness", selection: $skeletonThickness) {
-                    ForEach(SkeletonThickness.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                Toggle("Show joints", isOn: $skeletonShowJoints)
-                Toggle("Show skeleton", isOn: $skeletonShowSkeleton)
-            }
+            .tint(Palette.brandRed)
         }
         .navigationTitle("Profile")
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            TextField("Name", text: $displayName)
+                .typography(Typography.headingMd).foregroundStyle(Palette.ink)
+            HStack {
+                stat("Workouts", "\(stats.totalWorkouts)")
+                Spacer()
+                stat("Streak", "\(stats.currentStreak)d")
+            }
+        }
+        .card()
+    }
+
+    private var settingsCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            sectionTitle("SETTINGS")
+            Toggle("Sound & voice", isOn: $audioEnabled)
+                .typography(Typography.bodyMd).foregroundStyle(Palette.ink)
+            Picker("Appearance", selection: $appearance) {
+                ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            Picker("Voice", selection: $voiceID) {
+                Text("Default").tag("")
+                ForEach(voices, id: \.identifier) { voice in
+                    Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
+                }
+            }
+            .tint(Palette.body)
+            Button { previewVoice() } label: {
+                Label("Preview voice", systemImage: "speaker.wave.2.fill")
+            }
+            .buttonStyle(TertiaryButtonStyle())
+        }
+        .card()
+    }
+
+    private var healthCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            sectionTitle("APPLE HEALTH")
+            Toggle("Connect Apple Health", isOn: $healthSyncEnabled)
+                .typography(Typography.bodyMd).foregroundStyle(Palette.ink)
+                .onChange(of: healthSyncEnabled) { _, isOn in
+                    if isOn { Task { try? await HealthStore.shared.requestAuthorization() } }
+                }
+        }
+        .card()
+    }
+
+    private var poseOverlayCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            sectionTitle("POSE OVERLAY")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Spacing.sm) {
+                    ForEach(OverlayPreset.all) { preset in
+                        PillTab(title: preset.id, isActive: false) { apply(preset) }
+                    }
+                }
+            }
+            Picker("Color", selection: $skeletonColor) {
+                ForEach(SkeletonColor.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .tint(Palette.body)
+            Picker("Thickness", selection: $skeletonThickness) {
+                ForEach(SkeletonThickness.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .tint(Palette.body)
+            Toggle("Show joints", isOn: $skeletonShowJoints)
+                .typography(Typography.bodyMd).foregroundStyle(Palette.ink)
+            Toggle("Show skeleton", isOn: $skeletonShowSkeleton)
+                .typography(Typography.bodyMd).foregroundStyle(Palette.ink)
+        }
+        .card()
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text).typography(Typography.bodySmStrong).foregroundStyle(Palette.mute)
     }
 
     private var voices: [AVSpeechSynthesisVoice] {
@@ -133,9 +169,9 @@ struct ProfileView: View {
     }
 
     private func stat(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title2.bold())
-            Text(title).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(value).typography(Typography.headingXl).foregroundStyle(Palette.ink)
+            Text(title).typography(Typography.captionSm).foregroundStyle(Palette.mute)
         }
     }
 }

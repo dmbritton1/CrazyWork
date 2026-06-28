@@ -121,8 +121,9 @@ struct LiveWorkoutView: View {
                 .foregroundStyle(.white)
         } else if let cue = coordinator.lastFormCue {
             Label(cue, systemImage: "exclamationmark.triangle.fill")
+                .typography(Typography.bodyStrong)
                 .padding()
-                .background(.orange, in: Capsule())
+                .background(Palette.accentRedDeep, in: Capsule())
                 .foregroundStyle(.white)
         }
     }
