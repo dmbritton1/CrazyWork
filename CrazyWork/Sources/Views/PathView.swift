@@ -7,11 +7,10 @@ import SwiftData
 struct PathView: View {
     @AppStorage("pathIndex") private var pathIndex = 0
     @AppStorage("pathLastCompletedDay") private var pathLastCompletedDay = Int.min
-    @State private var pulse = false
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
 
-    private let rowHeight: CGFloat = 116
-    private let nodeSize: CGFloat = 68
+    private let rowHeight: CGFloat = 152   // generous vertical spread between nodes
+    private let nodeSize: CGFloat = 64
 
     private var today: Int { PathProgram.epochDay(Date()) }
     private var progress: PathProgress {
@@ -45,7 +44,6 @@ struct PathView: View {
                 .padding(.bottom, Spacing.section)
             }
         }
-        .onAppear { pulse = true }
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -118,17 +116,20 @@ struct PathView: View {
         .padding(.horizontal, Spacing.lg)
     }
 
-    // MARK: Serpentine trail
+    // MARK: Flowing trail
 
     private var trail: some View {
         GeometryReader { geo in
             let cx = geo.size.width / 2
+            let amp = min(cx - 78, 124)   // keep dots + labels clear of the edges
+            let points = windowIndices.indices.map { local in
+                CGPoint(x: cx + wave(windowIndices[local]) * amp,
+                        y: rowHeight / 2 + CGFloat(local) * rowHeight)
+            }
             ZStack(alignment: .topLeading) {
-                connector(cx: cx)
+                flowLine(points)
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
-                    nodeView(nodeIndex)
-                        .position(x: cx + xOffset(local),
-                                  y: rowHeight / 2 + CGFloat(local) * rowHeight)
+                    nodeView(nodeIndex).position(points[local])
                 }
             }
         }
@@ -136,21 +137,48 @@ struct PathView: View {
         .padding(.top, Spacing.md)
     }
 
-    private func connector(cx: CGFloat) -> some View {
-        Path { p in
-            for local in windowIndices.indices {
-                let pt = CGPoint(x: cx + xOffset(local),
-                                 y: rowHeight / 2 + CGFloat(local) * rowHeight)
-                if local == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
-            }
+    /// A smooth abstract wave behind the dots: one soft red ribbon that loosely
+    /// tracks the node positions, with two fainter offset echoes for depth.
+    private func flowLine(_ points: [CGPoint]) -> some View {
+        let path = smoothPath(points)
+        return ZStack {
+            path.stroke(Palette.hairlineStrong,
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: 26).opacity(0.6)
+            path.stroke(Palette.hairlineStrong,
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: -26).opacity(0.6)
+            path.stroke(Palette.accentRedDeep.opacity(0.5),
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         }
-        .stroke(Palette.hairlineStrong,
-                style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 8]))
     }
 
-    /// L · C · R · C serpentine sway.
-    private func xOffset(_ local: Int) -> CGFloat {
-        [-1.0, 0.0, 1.0, 0.0][local % 4] * 92
+    /// Builds a smooth curve through the points (midpoint quadratic smoothing),
+    /// extended past the first/last so the ribbon flows off the top and bottom.
+    private func smoothPath(_ raw: [CGPoint]) -> Path {
+        var pts = raw
+        if pts.count >= 2 {
+            let f = pts[0], f2 = pts[1]
+            pts.insert(CGPoint(x: 2 * f.x - f2.x, y: f.y - rowHeight), at: 0)
+            let l = pts[pts.count - 1], l2 = pts[pts.count - 2]
+            pts.append(CGPoint(x: 2 * l.x - l2.x, y: l.y + rowHeight))
+        }
+        return Path { p in
+            guard pts.count > 1 else { return }
+            p.move(to: pts[0])
+            for i in 1..<pts.count {
+                let prev = pts[i - 1], cur = pts[i]
+                let mid = CGPoint(x: (prev.x + cur.x) / 2, y: (prev.y + cur.y) / 2)
+                p.addQuadCurve(to: mid, control: prev)
+            }
+            p.addLine(to: pts[pts.count - 1])
+        }
+    }
+
+    /// Organic horizontal placement in [-1, 1] as a function of the absolute
+    /// node index — two summed sines so the dots wander rather than zig-zag.
+    private func wave(_ i: Int) -> CGFloat {
+        let x = Double(i)
+        let v = sin(x * 1.10 - 0.5) * 0.60 + sin(x * 0.47 + 0.3) * 0.40
+        return CGFloat(max(-1, min(1, v)))
     }
 
     @ViewBuilder
@@ -163,7 +191,7 @@ struct PathView: View {
                 .foregroundStyle(state == .locked || state == .lockedNext ? Palette.ash : Palette.body)
                 .lineLimit(1)
         }
-        .frame(width: 150)
+        .frame(width: 132)
     }
 
     @ViewBuilder
@@ -180,12 +208,7 @@ struct PathView: View {
                 circle(fill: Palette.brandRedSoft, border: Palette.brandRed,
                        symbol: ExerciseTile.symbol(for: day.entries.first?.exerciseID ?? ""),
                        symbolColor: Palette.accentRedBright)
-                    .overlay(
-                        Circle().stroke(Palette.brandRed, lineWidth: 2)
-                            .scaleEffect(pulse ? 1.3 : 1.04)
-                            .opacity(pulse ? 0 : 0.6)
-                            .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false), value: pulse)
-                    )
+                    .scaleEffect(1.14)   // today reads larger, no looping animation
             }
             .buttonStyle(.plain)
         case .lockedNext, .locked:
