@@ -10,50 +10,59 @@ struct StatsView: View {
     var body: some View {
         ZStack {
             Palette.canvas.ignoresSafeArea()
-            if sessions.isEmpty {
-                ContentUnavailableView("No workouts yet",
-                                       systemImage: "chart.xyaxis.line",
-                                       description: Text("Complete a workout to see your progress."))
-            } else {
-                content(stats)
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.xl) {
+                    HeroStripeBand {
+                        Text("Stats").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                    }
+                    if sessions.isEmpty {
+                        ContentUnavailableView("No workouts yet",
+                                               systemImage: "chart.xyaxis.line",
+                                               description: Text("Complete a workout to see your progress."))
+                            .frame(maxWidth: .infinity, minHeight: 320)
+                    } else {
+                        statsContent(stats)
+                    }
+                }
+                .padding(.bottom, Spacing.xl)
             }
         }
-        .navigationTitle("Stats")
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var stats: ProgressStats {
         ProgressStats(summaries: sessions.map(\.summary))
     }
 
-    private func content(_ stats: ProgressStats) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.xl) {
-                cards(stats)
-                trends(stats)
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("Consistency").typography(Typography.headingMd).foregroundStyle(Palette.ink)
-                    ConsistencyCalendarView(workoutDays: stats.workoutDays)
-                }
+    private func statsContent(_ stats: ProgressStats) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xl) {
+            cards(stats)
+            HealthMetricsCard()
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("Consistency").typography(Typography.headingMd).foregroundStyle(Palette.ink)
+                ConsistencyCalendarView(workoutDays: stats.workoutDays)
             }
-            .padding(Spacing.lg)
+            trends(stats)
         }
+        .padding(.horizontal, Spacing.lg)
     }
 
     private func cards(_ stats: ProgressStats) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Spacing.md) {
             statCard("Workouts", "\(stats.totalWorkouts)", "figure.run")
-            statCard("Current streak", "\(stats.currentStreak)d", "flame.fill")
-            statCard("Longest streak", "\(stats.longestStreak)d", "trophy.fill")
+            statCard("Current streak", "\(stats.currentStreak)d", "flame.fill", accent: true)
+            statCard("Longest streak", "\(stats.longestStreak)d", "trophy.fill", accent: true)
             statCard("Total reps", "\(stats.totalReps)", "number")
             statCard("Hold time", Self.clock(stats.totalHoldSeconds), "timer")
             statCard("Active time", Self.duration(stats.totalActiveTime), "clock")
         }
     }
 
-    private func statCard(_ title: String, _ value: String, _ icon: String) -> some View {
+    private func statCard(_ title: String, _ value: String, _ icon: String, accent: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Label(title, systemImage: icon).typography(Typography.captionMd).foregroundStyle(Palette.mute)
-            Text(value).typography(Typography.headingXl).foregroundStyle(Palette.ink)
+            Text(value).typography(Typography.headingXl)
+                .foregroundStyle(accent ? Palette.brandRed : Palette.ink)
         }
         .card(surface: Palette.surfaceElevated)
     }

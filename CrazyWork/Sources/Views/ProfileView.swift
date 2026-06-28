@@ -52,16 +52,23 @@ struct ProfileView: View {
             Palette.canvas.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
-                    headerCard
-                    settingsCard
-                    if HKHealthStore.isHealthDataAvailable() { healthCard }
-                    poseOverlayCard
+                    HeroStripeBand {
+                        Text("Profile").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                    }
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        headerCard
+                        settingsCard
+                        if HKHealthStore.isHealthDataAvailable() { healthCard }
+                        HealthMetricsCard()
+                        poseOverlayCard
+                    }
+                    .padding(.horizontal, Spacing.lg)
                 }
-                .padding(Spacing.lg)
+                .padding(.bottom, Spacing.lg)
             }
             .tint(Palette.brandRed)
         }
-        .navigationTitle("Profile")
+        .toolbar(.hidden, for: .navigationBar)
         .task { if availableVoices.isEmpty { availableVoices = Self.loadVoices() } }
     }
 
@@ -72,7 +79,7 @@ struct ProfileView: View {
             HStack {
                 stat("Workouts", "\(stats.totalWorkouts)")
                 Spacer()
-                stat("Streak", "\(stats.currentStreak)d")
+                stat("Streak", "\(stats.currentStreak)d", accent: true)
             }
         }
         .card()
@@ -172,9 +179,10 @@ struct ProfileView: View {
         previewSynth.speak(utterance)
     }
 
-    private func stat(_ title: String, _ value: String) -> some View {
+    private func stat(_ title: String, _ value: String, accent: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(value).typography(Typography.headingXl).foregroundStyle(Palette.ink)
+            Text(value).typography(Typography.headingXl)
+                .foregroundStyle(accent ? Palette.brandRed : Palette.ink)
             Text(title).typography(Typography.captionSm).foregroundStyle(Palette.mute)
         }
     }

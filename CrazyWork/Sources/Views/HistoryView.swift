@@ -7,13 +7,17 @@ struct HistoryView: View {
     var body: some View {
         ZStack {
             Palette.canvas.ignoresSafeArea()
-            if sessions.isEmpty {
-                ContentUnavailableView("No history yet",
-                                       systemImage: "clock.arrow.circlepath",
-                                       description: Text("Finished workouts show up here."))
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: Spacing.md) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    HeroStripeBand {
+                        Text("History").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                    }
+                    if sessions.isEmpty {
+                        ContentUnavailableView("No history yet",
+                                               systemImage: "clock.arrow.circlepath",
+                                               description: Text("Finished workouts show up here."))
+                            .frame(maxWidth: .infinity, minHeight: 320)
+                    } else {
                         ForEach(sessions) { session in
                             VStack(alignment: .leading, spacing: Spacing.xs) {
                                 Text(session.startedAt, style: .date)
@@ -22,13 +26,14 @@ struct HistoryView: View {
                                     .typography(Typography.bodySm).foregroundStyle(Palette.mute)
                             }
                             .card()
+                            .padding(.horizontal, Spacing.lg)
                         }
                     }
-                    .padding(Spacing.lg)
                 }
+                .padding(.bottom, Spacing.xl)
             }
         }
-        .navigationTitle("History")
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private func summary(_ session: WorkoutSession) -> String {

@@ -15,23 +15,25 @@ struct PremadePlansView: View {
             ZStack {
                 Palette.canvas.ignoresSafeArea()
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: Spacing.lg) {
-                        Text("Plans").typography(Typography.displayLg).foregroundStyle(Palette.ink)
-                            .padding(.top, Spacing.sm)
-
-                        if !saved.isEmpty {
-                            sectionHeader("MY WORKOUTS")
-                            ForEach(saved) { workout in
-                                planCard(workout.asPlan, onDelete: { modelContext.delete(workout) })
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        HeroStripeBand {
+                            Text("Plans").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                        }
+                        LazyVStack(alignment: .leading, spacing: Spacing.lg) {
+                            if !saved.isEmpty {
+                                sectionHeader("MY WORKOUTS")
+                                ForEach(saved) { workout in
+                                    planCard(workout.asPlan, onDelete: { modelContext.delete(workout) })
+                                }
+                            }
+                            sectionHeader("PLANS")
+                            ForEach(PremadePlanCatalog.all) { plan in
+                                planCard(plan, onDelete: nil)
                             }
                         }
-
-                        sectionHeader("PLANS")
-                        ForEach(PremadePlanCatalog.all) { plan in
-                            planCard(plan, onDelete: nil)
-                        }
+                        .padding(.horizontal, Spacing.lg)
                     }
-                    .padding(Spacing.lg)
+                    .padding(.bottom, Spacing.lg)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
