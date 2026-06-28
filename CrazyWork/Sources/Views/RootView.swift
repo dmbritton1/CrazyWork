@@ -8,7 +8,7 @@ struct RootView: View {
     @State private var restSeconds: Int = 30
     @State private var selection: Tab = .workout
 
-    private enum Tab { case workout, plans, history }
+    private enum Tab { case workout, plans, stats, history }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -23,6 +23,10 @@ struct RootView: View {
             }
             .tabItem { Label("Plans", systemImage: "list.bullet.rectangle") }
             .tag(Tab.plans)
+
+            NavigationStack { StatsView() }
+                .tabItem { Label("Stats", systemImage: "chart.xyaxis.line") }
+                .tag(Tab.stats)
 
             NavigationStack { HistoryView() }
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
