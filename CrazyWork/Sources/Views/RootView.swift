@@ -6,15 +6,19 @@ import SwiftUI
 struct RootView: View {
     @State private var entries: [WorkoutEntry] = []
     @State private var restSeconds: Int = 30
-    @State private var selection: Tab = .workout
+    @State private var selection: Tab = .path
     @AppStorage("appearance") private var appearance = AppearanceMode.system
 
-    private enum Tab { case workout, plans, stats, history, profile }
+    private enum Tab { case path, workout, plans, stats, history, profile }
 
     init() { ThemeAppearance.configure() }
 
     var body: some View {
         TabView(selection: $selection) {
+            NavigationStack { PathView() }
+                .tabItem { Label("Today", systemImage: "flag.checkered") }
+                .tag(Tab.path)
+
             BuildWorkoutView(entries: $entries, restSeconds: $restSeconds)
                 .tabItem { Label("Workout", systemImage: "figure.strengthtraining.traditional") }
                 .tag(Tab.workout)
