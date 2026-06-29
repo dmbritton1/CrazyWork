@@ -167,27 +167,36 @@ struct PathView: View {
     /// different rhythm than the dots, so it weaves around them rather than
     /// connecting them — with two fainter offset echoes for depth.
     private func flowLine(height: CGFloat, cx: CGFloat, amp: CGFloat) -> some View {
-        let path = abstractPath(height: height, cx: cx, amp: amp)
+        // Several grey strands sharing the spine but each with its own phase and
+        // high-frequency wiggle, so the band reads as a complex woven line.
+        let main = ribbonPath(height: height, cx: cx, amp: amp, wiggleAmp: 0.06, wiggleFreq: 0.061)
+        let a = ribbonPath(height: height, cx: cx, amp: amp, phase: 1.3, wiggleAmp: 0.11, wiggleFreq: 0.049)
+        let b = ribbonPath(height: height, cx: cx, amp: amp, phase: 3.7, wiggleAmp: 0.15, wiggleFreq: 0.034)
+        let stroke = { (w: CGFloat) in StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round) }
         return ZStack {
-            path.stroke(Palette.hairlineStrong,
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: 32).opacity(0.5)
-            path.stroke(Palette.hairlineStrong,
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)).offset(x: -36).opacity(0.4)
-            path.stroke(Palette.accentRedDeep.opacity(0.45),
-                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+            main.stroke(Palette.hairlineStrong, style: stroke(1.4)).offset(x: 46).opacity(0.30)
+            main.stroke(Palette.hairlineStrong, style: stroke(1.4)).offset(x: -50).opacity(0.26)
+            a.stroke(Palette.hairlineStrong, style: stroke(1.3)).offset(x: 22).opacity(0.40)
+            b.stroke(Palette.hairlineStrong, style: stroke(1.3)).offset(x: -24).opacity(0.40)
+            main.stroke(Palette.mute.opacity(0.45), style: stroke(2))   // central strand, grey
         }
     }
 
-    /// A free-flowing curve sampled down the full height from `ribbonWave`,
-    /// extended past the top/bottom so the ribbon runs off both edges.
-    private func abstractPath(height: CGFloat, cx: CGFloat, amp: CGFloat) -> Path {
+    /// A free-flowing curve sampled down the full height from `ribbonWave`, with
+    /// an optional phase-shifted high-frequency wiggle, extended past the
+    /// top/bottom so each strand runs off both edges.
+    private func ribbonPath(height: CGFloat, cx: CGFloat, amp: CGFloat,
+                            phase: Double = 0, wiggleAmp: Double = 0,
+                            wiggleFreq: Double = 0) -> Path {
         Path { p in
             var y: CGFloat = -rowHeight
             var first = true
             while y <= height + rowHeight {
-                let pt = CGPoint(x: cx + ribbonWave(y) * amp, y: y)
+                let extra = wiggleAmp == 0 ? 0 : wiggleAmp * sin(Double(y) * wiggleFreq + phase)
+                let xv = Double(ribbonWave(y)) + extra
+                let pt = CGPoint(x: cx + CGFloat(xv) * amp, y: y)
                 if first { p.move(to: pt); first = false } else { p.addLine(to: pt) }
-                y += 14
+                y += 12
             }
         }
     }
