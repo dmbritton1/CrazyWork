@@ -10,7 +10,7 @@ struct PathView: View {
     @State private var scrollY: CGFloat = 0
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
 
-    private let rowHeight: CGFloat = 152   // generous vertical spread between nodes
+    private let rowHeight: CGFloat = 188   // generous vertical spread between nodes
     private let nodeSize: CGFloat = 64
 
     private var today: Int { PathProgram.epochDay(Date()) }
@@ -237,31 +237,39 @@ struct PathView: View {
     private func nodeCircle(state: NodeState, day: PathDay) -> some View {
         switch state {
         case .done:
-            circle(fill: Palette.brandRed, border: Palette.brandRed,
-                   symbol: "checkmark", symbolColor: Palette.onPrimary)
+            circle(center: Palette.brandRed.opacity(0.5), edge: Palette.brandRed.opacity(0.05),
+                   border: Palette.brandRed.opacity(0.30), borderWidth: 1,
+                   symbol: "checkmark", symbolColor: Palette.brandRed.opacity(0.85))
         case .today:
             NavigationLink {
                 LiveWorkoutView(plan: WorkoutPlan.expand(day.entries),
                                 restSeconds: day.restSeconds, onComplete: completeToday)
             } label: {
-                circle(fill: Palette.brandRedSoft, border: Palette.brandRed,
+                circle(center: Palette.brandRed.opacity(0.26), edge: .clear,
+                       border: Palette.brandRed.opacity(0.45), borderWidth: 1.5,
                        symbol: ExerciseTile.symbol(for: day.entries.first?.exerciseID ?? ""),
-                       symbolColor: Palette.accentRedBright)
-                    .scaleEffect(1.14)   // today reads larger, no looping animation
+                       symbolColor: Palette.accentRed)
+                    .scaleEffect(1.1)   // today reads a touch larger, still soft
             }
             .buttonStyle(.plain)
         case .lockedNext, .locked:
-            circle(fill: Palette.surfaceCard, border: Palette.hairline,
-                   symbol: "lock.fill", symbolColor: Palette.ash)
+            circle(center: Palette.surfaceCard.opacity(0.85), edge: .clear,
+                   border: Palette.hairline.opacity(0.45), borderWidth: 1,
+                   symbol: "lock.fill", symbolColor: Palette.mute.opacity(0.55))
         }
     }
 
-    private func circle(fill: Color, border: Color, symbol: String, symbolColor: Color) -> some View {
-        Circle().fill(fill)
+    /// A soft orb whose fill fades from `center` to `edge` so nodes melt into
+    /// the background rather than sitting as hard chips.
+    private func circle(center: Color, edge: Color, border: Color, borderWidth: CGFloat,
+                        symbol: String, symbolColor: Color) -> some View {
+        Circle()
+            .fill(RadialGradient(colors: [center, edge], center: .center,
+                                 startRadius: 1, endRadius: nodeSize / 2))
             .frame(width: nodeSize, height: nodeSize)
-            .overlay(Circle().stroke(border, lineWidth: 2))
+            .overlay(Circle().stroke(border, lineWidth: borderWidth))
             .overlay(Image(systemName: symbol)
-                .font(.system(size: nodeSize * 0.4, weight: .semibold))
+                .font(.system(size: nodeSize * 0.38, weight: .medium))
                 .foregroundStyle(symbolColor))
     }
 
