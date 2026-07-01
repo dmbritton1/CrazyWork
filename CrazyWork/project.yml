@@ -20,6 +20,8 @@ targets:
     dependencies:
       - package: ChallengeCore
     scheme:
+      testTargets:
+        - CrazyWorkTests
       storeKitConfiguration: Sources/Products.storekit
     info:
       path: Sources/App/Info.plist

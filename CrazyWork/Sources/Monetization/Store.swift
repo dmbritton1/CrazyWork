@@ -22,9 +22,9 @@ final class Store {
     ]
 
     private(set) var isPro = false
-    // ponytail: nonisolated(unsafe) lets deinit cancel without a hop; safe because
-    // only init writes it once and deinit reads it once with no concurrent access.
-    nonisolated(unsafe) private var updatesTask: Task<Void, Never>?
+    // Not UI state, so exclude it from observation; nonisolated(unsafe) then lets
+    // the nonisolated deinit cancel it. Safe: only init writes it, once.
+    @ObservationIgnored nonisolated(unsafe) private var updatesTask: Task<Void, Never>?
 
     init() {
         // React to renewals, refunds, revocations, Family Sharing changes.

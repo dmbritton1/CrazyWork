@@ -2,7 +2,8 @@ import UIKit
 
 enum ThemeAppearance {
     /// Themes UIKit-backed bars (tab + nav) to the canvas surface with hairline rules.
-    static func configure() {
+    /// UIKit appearance proxies are main-actor isolated, so this must be too.
+    @MainActor static func configure() {
         let tab = UITabBarAppearance()
         tab.configureWithOpaqueBackground()
         tab.backgroundColor = UIColor(Palette.canvas)
