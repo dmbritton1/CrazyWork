@@ -3,12 +3,14 @@ import ChallengeCore
 import SwiftData
 
 /// The Plans tab: curated workouts shown as cards (name, estimated time,
-/// description, exercise summary). Choosing one hands the plan back via
-/// `onChoose` — `RootView` loads it into the builder and switches tabs.
+/// description, exercise summary). The + button opens the builder for a new
+/// workout; choosing a card opens the builder pre-loaded with that plan.
 struct PremadePlansView: View {
-    let onChoose: (PremadePlan) -> Void
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SavedWorkout.createdAt, order: .reverse) private var saved: [SavedWorkout]
+    @State private var draftEntries: [WorkoutEntry] = []
+    @State private var draftRest = 30
+    @State private var showingBuilder = false
 
     var body: some View {
         NavigationStack {
@@ -17,7 +19,16 @@ struct PremadePlansView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         HeroStripeBand {
-                            Text("Plans").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                            HStack {
+                                Text("Plans").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                                Spacer()
+                                Button(action: newWorkout) {
+                                    Image(systemName: "plus")
+                                        .font(.title2.weight(.semibold))
+                                        .foregroundStyle(Palette.ink)
+                                }
+                                .accessibilityLabel("Build a workout")
+                            }
                         }
                         LazyVStack(alignment: .leading, spacing: Spacing.lg) {
                             if !saved.isEmpty {
@@ -37,7 +48,22 @@ struct PremadePlansView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showingBuilder) {
+                BuildWorkoutView(entries: $draftEntries, restSeconds: $draftRest)
+            }
         }
+    }
+
+    private func newWorkout() {
+        draftEntries = []
+        draftRest = 30
+        showingBuilder = true
+    }
+
+    private func choose(_ plan: PremadePlan) {
+        draftEntries = plan.entries
+        draftRest = plan.restSeconds
+        showingBuilder = true
     }
 
     private func sectionHeader(_ text: String) -> some View {
@@ -46,8 +72,8 @@ struct PremadePlansView: View {
     }
 
     private func planCard(_ plan: PremadePlan, onDelete: (() -> Void)?) -> some View {
-        Button { onChoose(plan) } label: { card(plan, onDelete: onDelete) }
-            .buttonStyle(.plain)
+        Button { choose(plan) } label: { card(plan, onDelete: onDelete) }
+            .buttonStyle(PressableButtonStyle())
     }
 
     private func card(_ plan: PremadePlan, onDelete: (() -> Void)?) -> some View {

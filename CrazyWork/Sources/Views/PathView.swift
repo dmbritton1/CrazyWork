@@ -8,10 +8,20 @@ struct PathView: View {
     @AppStorage("pathIndex") private var pathIndex = 0
     @AppStorage("pathLastCompletedDay") private var pathLastCompletedDay = Int.min
     @State private var scrollY: CGFloat = 0
+    @State private var selectedNode: NodeSelection?
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
+
+    /// A tapped node: which day, and whether it's the current (startable) one.
+    /// Carries the absolute index so repeated days on the path stay distinct.
+    private struct NodeSelection: Identifiable {
+        let id: Int
+        let day: PathDay
+        let startable: Bool
+    }
 
     private let rowHeight: CGFloat = 188   // generous vertical spread between nodes
     private let nodeSize: CGFloat = 64
+    private let topExtra: CGFloat = 150    // headroom for the ribbon to rise past the first node and fade out
 
     private var today: Int { PathProgram.epochDay(Date()) }
     private var progress: PathProgress {
@@ -47,7 +57,6 @@ struct PathView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     hero
-                    focusCard
                     if doneToday { supplementarySection }
                     trail
                 }
@@ -86,35 +95,6 @@ struct PathView: View {
         }
     }
 
-    private var focusCard: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            HStack {
-                Text(todayDay.title).typography(Typography.headingMd).foregroundStyle(Palette.ink)
-                Spacer()
-                Badge(text: todayDay.focus, style: .redSoft)
-            }
-            ForEach(todayDay.entries) { entry in
-                Text("\(entry.sets)× \(entry.target) · \(entry.exerciseID.capitalized)")
-                    .typography(Typography.bodySm).foregroundStyle(Palette.body)
-            }
-            if doneToday {
-                Label("Completed today", systemImage: "checkmark.circle.fill")
-                    .typography(Typography.bodyStrong).foregroundStyle(Palette.accentGreen)
-            } else {
-                NavigationLink {
-                    LiveWorkoutView(plan: WorkoutPlan.expand(todayDay.entries),
-                                    restSeconds: todayDay.restSeconds,
-                                    onComplete: completeToday)
-                } label: {
-                    Text("Start today's workout").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-            }
-        }
-        .card()
-        .padding(.horizontal, Spacing.lg)
-    }
-
     private var supplementarySection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("WANT MORE?").typography(Typography.bodySmStrong).foregroundStyle(Palette.mute)
@@ -133,7 +113,7 @@ struct PathView: View {
                     }
                     .card()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
             }
         }
         .padding(.horizontal, Spacing.lg)
@@ -146,9 +126,9 @@ struct PathView: View {
             let cx = geo.size.width / 2
             let amp = min(cx - 24, 172)      // shared with the ribbon
             let maxOff = cx - 66             // keep dots + labels on screen
-            let height = rowHeight * CGFloat(windowIndices.count)
+            let height = rowHeight * CGFloat(windowIndices.count) + topExtra
             let points = windowIndices.indices.map { local -> CGPoint in
-                let y = rowHeight / 2 + CGFloat(local) * rowHeight
+                let y = topExtra + rowHeight / 2 + CGFloat(local) * rowHeight
                 let x = cx + ribbonWave(y) * amp + insideOffset(y)  // tuck into the curve
                 return CGPoint(x: min(cx + maxOff, max(cx - maxOff, x)), y: y)
             }
@@ -159,8 +139,18 @@ struct PathView: View {
                 }
             }
         }
-        .frame(height: rowHeight * CGFloat(windowIndices.count))
-        .padding(.top, Spacing.md)
+        .frame(height: rowHeight * CGFloat(windowIndices.count) + topExtra)
+        // Ribbon rises through this headroom and dissolves instead of a hard
+        // clip. The fade is clear exactly at the top edge, so there's no seam;
+        // nodes sit below the faded zone, unaffected. Bottom stays contained.
+        .mask(
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: topExtra)
+                Color.black
+            }
+        )
+        .padding(.top, Spacing.md - topExtra)   // pull the headroom up over the hero gap; nodes stay put
     }
 
     /// An abstract red ribbon that meanders on its own — wider amplitude and a
@@ -224,13 +214,24 @@ struct PathView: View {
     private func nodeView(_ nodeIndex: Int) -> some View {
         let state = progress.state(of: nodeIndex, today: today)
         let day = PathProgram.day(at: nodeIndex)
-        VStack(spacing: Spacing.xs) {
-            nodeCircle(state: state, day: day)
-            Text(day.title).typography(Typography.captionMd)
-                .foregroundStyle(state == .locked || state == .lockedNext ? Palette.ash : Palette.body)
-                .lineLimit(1)
+        Button {
+            selectedNode = NodeSelection(id: nodeIndex, day: day, startable: state == .today)
+        } label: {
+            VStack(spacing: Spacing.xs) {
+                nodeCircle(state: state, day: day)
+                Text(day.title).typography(Typography.captionMd)
+                    .foregroundStyle(state == .locked || state == .lockedNext ? Palette.ash : Palette.body)
+                    .lineLimit(1)
+            }
+            .frame(width: 132)
         }
-        .frame(width: 132)
+        .buttonStyle(PressableButtonStyle())
+        .popover(item: Binding(             // anchored to THIS circle only
+            get: { selectedNode?.id == nodeIndex ? selectedNode : nil },
+            set: { selectedNode = $0 }
+        ), arrowEdge: .top) { sel in
+            WorkoutBubble(day: sel.day, startable: sel.startable, onComplete: completeToday)
+        }
     }
 
     @ViewBuilder
@@ -241,17 +242,11 @@ struct PathView: View {
                    border: Palette.brandRed.opacity(0.30), borderWidth: 1,
                    symbol: "checkmark", symbolColor: Palette.brandRed.opacity(0.85))
         case .today:
-            NavigationLink {
-                LiveWorkoutView(plan: WorkoutPlan.expand(day.entries),
-                                restSeconds: day.restSeconds, onComplete: completeToday)
-            } label: {
-                circle(center: Palette.brandRed.opacity(0.26), edge: .clear,
-                       border: Palette.brandRed.opacity(0.45), borderWidth: 1.5,
-                       symbol: ExerciseTile.symbol(for: day.entries.first?.exerciseID ?? ""),
-                       symbolColor: Palette.accentRed)
-                    .scaleEffect(1.1)   // today reads a touch larger, still soft
-            }
-            .buttonStyle(.plain)
+            circle(center: Palette.brandRed.opacity(0.26), edge: .clear,
+                   border: Palette.brandRed.opacity(0.45), borderWidth: 1.5,
+                   symbol: ExerciseTile.symbol(for: day.entries.first?.exerciseID ?? ""),
+                   symbolColor: Palette.accentRed)
+                .scaleEffect(1.1)   // today reads a touch larger, still soft
         case .lockedNext, .locked:
             circle(center: Palette.surfaceCard.opacity(0.85), edge: .clear,
                    border: Palette.hairline.opacity(0.45), borderWidth: 1,
@@ -277,5 +272,56 @@ struct PathView: View {
         let next = progress.completing(today: today)
         pathIndex = next.index
         pathLastCompletedDay = next.lastCompletedDay
+    }
+}
+
+/// Tapping a path node pops a speech bubble above the circle: the workout's
+/// description (focus, the exercise breakdown, rest). The current day is
+/// `startable`, so it also gets a "Start workout" action; other days are
+/// description-only previews.
+private struct WorkoutBubble: View {
+    let day: PathDay
+    let startable: Bool
+    let onComplete: () -> Void
+    @State private var starting = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Badge(text: day.focus, style: .redSoft)
+                Text(day.title).typography(Typography.headingSm).foregroundStyle(Palette.ink)
+                Text("\(day.entries.count) exercise\(day.entries.count == 1 ? "" : "s") · \(day.restSeconds)s rest")
+                    .typography(Typography.captionMd).foregroundStyle(Palette.mute)
+            }
+
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                ForEach(day.entries) { entry in
+                    HStack(spacing: Spacing.sm) {
+                        ExerciseTile(exerciseID: entry.exerciseID, size: 36)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(entry.exerciseID.capitalized)
+                                .typography(Typography.bodySmStrong).foregroundStyle(Palette.ink)
+                            Text("\(entry.sets) sets × \(entry.target)")
+                                .typography(Typography.captionMd).foregroundStyle(Palette.mute)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+
+            if startable {
+                Button { starting = true } label: {
+                    Text("Start workout").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .padding(Spacing.lg)
+        .frame(width: 260)
+        .presentationCompactAdaptation(.popover)   // stay a bubble on iPhone, not a sheet
+        .fullScreenCover(isPresented: $starting) {
+            LiveWorkoutView(plan: WorkoutPlan.expand(day.entries),
+                            restSeconds: day.restSeconds, onComplete: onComplete)
+        }
     }
 }

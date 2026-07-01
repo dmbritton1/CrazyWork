@@ -92,7 +92,7 @@ struct ProfileView: View {
             }
             .card()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle())
         .disabled(store.isPro)
     }
 
