@@ -42,6 +42,8 @@ struct ProfileView: View {
     /// Loaded off the first render — enumerating system voices synchronously in
     /// `body` (as a `.menu` Picker does outside a Form) blanks the launch frame.
     @State private var availableVoices: [AVSpeechSynthesisVoice] = []
+    @Environment(Store.self) private var store
+    @State private var showPaywall = false
 
     private var stats: ProgressStats {
         ProgressStats(summaries: sessions.map(\.summary))
@@ -56,6 +58,7 @@ struct ProfileView: View {
                         Text("Profile").typography(Typography.displayLg).foregroundStyle(Palette.ink)
                     }
                     VStack(alignment: .leading, spacing: Spacing.lg) {
+                        proCard
                         headerCard
                         settingsCard
                         if HKHealthStore.isHealthDataAvailable() { healthCard }
@@ -70,6 +73,27 @@ struct ProfileView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { if availableVoices.isEmpty { availableVoices = Self.loadVoices() } }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
+    }
+
+    private var proCard: some View {
+        Button { if !store.isPro { showPaywall = true } } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text(store.isPro ? "Pro member" : "Upgrade to Pro")
+                        .typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
+                    Text(store.isPro ? "Thanks for supporting CrazyWork"
+                                     : "Unlock everything in CrazyWork")
+                        .typography(Typography.captionMd).foregroundStyle(Palette.mute)
+                }
+                Spacer()
+                Image(systemName: store.isPro ? "checkmark.seal.fill" : "chevron.right")
+                    .foregroundStyle(store.isPro ? Palette.brandRed : Palette.mute)
+            }
+            .card()
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isPro)
     }
 
     private var headerCard: some View {
