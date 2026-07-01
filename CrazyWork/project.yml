@@ -19,6 +19,8 @@ targets:
     sources: [Sources]
     dependencies:
       - package: ChallengeCore
+    scheme:
+      storeKitConfiguration: Sources/Products.storekit
     info:
       path: Sources/App/Info.plist
       properties:

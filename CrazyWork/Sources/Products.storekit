@@ -1,0 +1,68 @@
+{
+  "identifier" : "A1B2C3D4",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "20881234",
+      "localizations" : [],
+      "name" : "CrazyWork Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "10001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlock everything in CrazyWork.",
+              "displayName" : "CrazyWork Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.crazywork.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "CrazyWork Pro Monthly",
+          "subscriptionGroupID" : "20881234",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "10002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlock everything in CrazyWork.",
+              "displayName" : "CrazyWork Pro Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.crazywork.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "CrazyWork Pro Yearly",
+          "subscriptionGroupID" : "20881234",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
