@@ -16,8 +16,9 @@
 - Only `.verified` transactions grant Pro; `.unverified` is always ignored.
 - A Restore Purchases path is mandatory (App Store requirement) — provided by the native paywall.
 - Marketing copy must be placeholder-free but generic ("Unlock everything in CrazyWork") — no per-feature promises, since no features are gated yet.
-- New files (`.swift` and `.storekit`) must be added to the **CrazyWork** app target in Xcode; test files to the **CrazyWorkTests** target. This is an `.xcodeproj` — a file not in a target's "Compile Sources" build phase silently won't build.
+- **The project is XcodeGen-generated.** `CrazyWork/project.yml` declares `sources: [Sources]` (app target) and `sources: [Tests]` (test target), so any new file under those folders is auto-included after regenerating. Do NOT hand-edit `project.pbxproj` — after adding/moving files or editing `project.yml`, run `cd CrazyWork && xcodegen generate`, then commit the regenerated `project.pbxproj` alongside your sources.
 - Tests are XCTest in `CrazyWork/Tests/`, using `@testable import CrazyWork`.
+- Build/test destination: `platform=iOS Simulator,name=iPhone 17 Pro` (the simulators available on this machine; there is no iPhone 16).
 
 ---
 
@@ -25,7 +26,8 @@
 
 - `CrazyWork/Sources/Monetization/Store.swift` (new) — `Store` observable + `ProEntitlement` value type + pure `isProActive` rule.
 - `CrazyWork/Sources/Monetization/PaywallView.swift` (new) — native paywall wrapper.
-- `CrazyWork/Products.storekit` (new) — local StoreKit test config; selected in the Run scheme.
+- `CrazyWork/Sources/Products.storekit` (new) — local StoreKit test config; wired into the run scheme via `project.yml`.
+- `CrazyWork/project.yml` (modify) — add `scheme.storeKitConfiguration` to the CrazyWork target so the config is used at run time.
 - `CrazyWork/Tests/StoreTests.swift` (new) — unit tests for the entitlement rule.
 - `CrazyWork/Sources/App/CrazyWorkApp.swift` (modify) — create + inject `Store`.
 - `CrazyWork/Sources/Views/ProfileView.swift` (modify) — upgrade row + paywall sheet.
@@ -91,11 +93,14 @@ final class StoreTests: XCTestCase {
 }
 ```
 
-Add the file to the **CrazyWorkTests** target (Xcode: File Inspector → Target Membership → CrazyWorkTests).
+The file lands under `Tests/`, which the test target already globs — no manual target step. Regenerate so the new file is in the project:
+
+Run: `cd CrazyWork && xcodegen generate`
+Expected: `Created project at .../CrazyWork.xcodeproj`.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `xcodebuild test -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:CrazyWorkTests/StoreTests`
+Run: `xcodebuild test -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:CrazyWorkTests/StoreTests`
 Expected: FAIL — compile error, `ProEntitlement` / `Store` not found.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -164,11 +169,14 @@ final class Store {
 }
 ```
 
-Add the file to the **CrazyWork** target (File Inspector → Target Membership → CrazyWork).
+The file lands under `Sources/`, already globbed by the app target. Regenerate so it's in the project:
+
+Run: `cd CrazyWork && xcodegen generate`
+Expected: `Created project at .../CrazyWork.xcodeproj`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `xcodebuild test -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:CrazyWorkTests/StoreTests`
+Run: `xcodebuild test -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:CrazyWorkTests/StoreTests`
 Expected: PASS — 5 tests pass.
 
 - [ ] **Step 5: Commit**
@@ -192,20 +200,92 @@ git commit -m "feat(monetization): Store entitlement source of truth + pure rule
 
 - [ ] **Step 1: Create the StoreKit configuration file**
 
-In Xcode: File → New → File from Template → **StoreKit Configuration File**. Name it `Products` (creates `CrazyWork/Products.storekit`). Leave "Sync this file with an app in App Store Connect" **unchecked** (standalone/local).
+Create `CrazyWork/Sources/Products.storekit` with a subscription group `CrazyWork Pro` holding the two auto-renewable products (prices are placeholders — tune later; they do not affect the code):
 
-In the `.storekit` editor, add a **Subscription Group** named `CrazyWork Pro`, then add two **auto-renewable subscriptions** inside it:
+```json
+{
+  "identifier" : "A1B2C3D4",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "20881234",
+      "localizations" : [],
+      "name" : "CrazyWork Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "10001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlock everything in CrazyWork.",
+              "displayName" : "CrazyWork Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.crazywork.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "CrazyWork Pro Monthly",
+          "subscriptionGroupID" : "20881234",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "10002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlock everything in CrazyWork.",
+              "displayName" : "CrazyWork Pro Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.crazywork.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "CrazyWork Pro Yearly",
+          "subscriptionGroupID" : "20881234",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
+```
 
-| Reference Name | Product ID | Duration | Price |
-|---|---|---|---|
-| CrazyWork Pro Monthly | `com.crazywork.pro.monthly` | 1 Month | 4.99 |
-| CrazyWork Pro Yearly | `com.crazywork.pro.yearly` | 1 Year | 39.99 |
+- [ ] **Step 2: Wire the config into the run scheme via `project.yml`**
 
-(Prices are placeholders — tune later; they do not affect the code.)
+In `CrazyWork/project.yml`, add a `scheme` block to the `CrazyWork` target (a sibling of its existing `sources:` / `dependencies:` / `info:` keys), so XcodeGen generates a shared scheme that uses the StoreKit config at run time:
 
-- [ ] **Step 2: Select the config in the Run scheme**
+```yaml
+    scheme:
+      storeKitConfiguration: Sources/Products.storekit
+```
 
-Xcode: Product → Scheme → Edit Scheme → **Run** → **Options** tab → **StoreKit Configuration** → select `Products.storekit`. This makes purchases work in the simulator with no sandbox account.
+Then regenerate:
+
+Run: `cd CrazyWork && xcodegen generate`
+Expected: `Created project at .../CrazyWork.xcodeproj`. (This also adds `Products.storekit` to the project — XcodeGen treats `.storekit` files specially, not as a bundled app resource.)
 
 - [ ] **Step 3: Write the paywall view**
 
@@ -242,19 +322,22 @@ struct PaywallView: View {
 }
 ```
 
-Add the file to the **CrazyWork** target.
+The file lands under `Sources/`, already globbed by the app target. Regenerate:
 
-- [ ] **Step 4: Verify manually in the simulator**
+Run: `cd CrazyWork && xcodegen generate`
+Expected: `Created project at .../CrazyWork.xcodeproj`.
 
-Temporarily add a preview entry point OR wait for Task 3's Profile row. Fastest check now: run the app on the iPhone 16 simulator, then confirm the project builds clean:
+- [ ] **Step 4: Verify the project builds clean**
 
-Run: `xcodebuild build -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 16'`
-Expected: `BUILD SUCCEEDED`. (Interactive paywall behavior is verified end-to-end in Task 3.)
+Interactive paywall behavior is verified end-to-end in Task 3; here just confirm compilation:
+
+Run: `xcodebuild build -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
+Expected: `BUILD SUCCEEDED`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add CrazyWork/Products.storekit CrazyWork/Sources/Monetization/PaywallView.swift CrazyWork/CrazyWork.xcodeproj/project.pbxproj
+git add CrazyWork/Sources/Products.storekit CrazyWork/Sources/Monetization/PaywallView.swift CrazyWork/project.yml CrazyWork/CrazyWork.xcodeproj
 git commit -m "feat(monetization): local StoreKit config + native paywall view"
 ```
 
@@ -352,10 +435,12 @@ and add the sheet modifier next to the existing `.task { ... }` on the outer vie
 
 - [ ] **Step 3: Build**
 
-Run: `xcodebuild build -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 16'`
+(Both files already exist in the target — no `xcodegen generate` needed.)
+
+Run: `xcodebuild build -project CrazyWork/CrazyWork.xcodeproj -scheme CrazyWork -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`
 Expected: `BUILD SUCCEEDED`.
 
-- [ ] **Step 4: Manual end-to-end smoke test (simulator, with `Products.storekit` selected in the scheme)**
+- [ ] **Step 4: Manual end-to-end smoke test (simulator; StoreKit config is wired into the scheme via `project.yml`)**
 
 Run the app on the iPhone 16 simulator and verify:
 1. Profile tab → "Upgrade to Pro" row shows a chevron. Tap it → native paywall appears with Monthly + Yearly plans and a Restore button.
