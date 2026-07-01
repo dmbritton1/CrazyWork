@@ -131,15 +131,36 @@ User taps "Upgrade to Pro" in Profile → PaywallView sheet
 
 ## Testing / verification
 
-- **Unit test** (`StoreTests`): entitlement-derivation logic — given a set of
-  transaction states (verified+active, expired, revoked, unverified, wrong product
-  ID) the mapping to `isPro` is correct. This is the one piece of real logic worth
-  a runnable check; keep it dependency-free (test the pure derivation function, not
-  StoreKit itself).
-- **Manual smoke test** via `Products.storekit` in the simulator: buy monthly →
-  Profile flips to "Pro member" and a gated sample path (temporary `if store.isPro`
-  in a debug view) unlocks; use the StoreKit Transaction Manager to expire/refund →
-  `isPro` flips back; Restore re-grants.
+Three layers, cheapest first. Day-to-day testing lives entirely in layer 1.
+
+### 1. Local `.storekit` file — simulator, no account, no money (primary)
+
+With `Products.storekit` selected in the Run scheme:
+- Run in the simulator → Profile → "Upgrade to Pro" → native paywall shows the
+  plans from the config file. Buy → instant, no Apple ID/card → `isPro` flips →
+  Profile shows "Pro member."
+- **Xcode → Debug → StoreKit → Manage Transactions** drives every edge case by
+  hand: expire, refund, revoke, Ask-to-Buy. Confirm `isPro` flips back live.
+- In the `.storekit` editor, set an accelerated renewal rate (e.g. 30s = 1 month)
+  to watch a full renewal cycle in under a minute.
+- This is where the buy → unlock → expire → restore loop is verified.
+
+### 2. Unit test (`StoreTests`) — entitlement logic
+
+Given a set of transaction states (verified+active, expired, revoked, unverified,
+wrong product ID) the mapping to `isPro` is correct. Keep it dependency-free —
+test the pure derivation function, not StoreKit itself. Runs in CI. Catches the
+"refunded user still has Pro" class of bug.
+
+### 3. Sandbox — real App Store, fake money (pre-release checklist, one-time)
+
+Before shipping only:
+- Create the real products in App Store Connect (matching product IDs).
+- Create a Sandbox Apple ID (Users and Access → Sandbox Testers).
+- Run on a real device signed into that sandbox account, or via TestFlight →
+  purchases are free but hit the real StoreKit ↔ App Store round trip. Catches
+  product-ID typos, missing Paid Apps agreement, and provisioning issues the
+  local file can't.
 
 ## Files
 
