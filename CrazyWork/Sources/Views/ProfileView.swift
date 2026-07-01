@@ -120,7 +120,12 @@ struct ProfileView: View {
                 }
             }
             .pickerStyle(.segmented)
-            Picker("Voice", selection: $voiceID) {
+            // Fall back to "Default" while voices load (or if the saved voice
+            // isn't available), so the selection always has a matching tag.
+            Picker("Voice", selection: Binding(
+                get: { availableVoices.contains { $0.identifier == voiceID } ? voiceID : "" },
+                set: { voiceID = $0 }
+            )) {
                 Text("Default").tag("")
                 ForEach(availableVoices, id: \.identifier) { voice in
                     Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
