@@ -28,6 +28,9 @@ final class Store {
 
     init() {
         // React to renewals, refunds, revocations, Family Sharing changes.
+        // ponytail: we don't finish() transactions — this is a read-only
+        // entitlement model driven purely by currentEntitlements, so re-delivery
+        // is harmless. Finish transactions here if we ever process consumables.
         updatesTask = Task { [weak self] in
             for await _ in Transaction.updates { await self?.refresh() }
         }
