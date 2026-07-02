@@ -1,17 +1,21 @@
 import SwiftUI
 
-/// App root: tabs for building/running a workout, browsing premade plans, and
-/// viewing history. Owns the editable workout draft (`entries` + `restSeconds`)
-/// shared by the first two tabs.
+/// App root: tabs for the daily path, browsing/building plans, stats, history,
+/// and profile. The workout builder is reached from the Plans tab's + button.
 struct RootView: View {
-    @State private var entries: [WorkoutEntry] = []
-    @State private var restSeconds: Int = 30
     @State private var selection: Tab = .path
     @AppStorage("appearance") private var appearance = AppearanceMode.system
 
-    private enum Tab { case path, workout, plans, stats, history, profile }
+    private enum Tab: String { case path, plans, stats, history, profile }
 
-    init() { ThemeAppearance.configure() }
+    init() {
+        ThemeAppearance.configure()
+        // Screenshot/debug hook: `-startTab stats` (a launch argument lands in
+        // UserDefaults) opens that tab first. No effect in normal launches.
+        if let name = UserDefaults.standard.string(forKey: "startTab"), let tab = Tab(rawValue: name) {
+            _selection = State(initialValue: tab)
+        }
+    }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -19,17 +23,9 @@ struct RootView: View {
                 .tabItem { Label("Today", systemImage: "flag.checkered") }
                 .tag(Tab.path)
 
-            BuildWorkoutView(entries: $entries, restSeconds: $restSeconds)
-                .tabItem { Label("Workout", systemImage: "figure.strengthtraining.traditional") }
-                .tag(Tab.workout)
-
-            PremadePlansView { plan in
-                entries = plan.entries
-                restSeconds = plan.restSeconds
-                selection = .workout
-            }
-            .tabItem { Label("Plans", systemImage: "list.bullet.rectangle") }
-            .tag(Tab.plans)
+            PremadePlansView()
+                .tabItem { Label("Plans", systemImage: "list.bullet.rectangle") }
+                .tag(Tab.plans)
 
             NavigationStack { StatsView() }
                 .tabItem { Label("Stats", systemImage: "chart.xyaxis.line") }
