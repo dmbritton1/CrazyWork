@@ -45,15 +45,6 @@ struct PathView: View {
     var body: some View {
         ZStack {
             Palette.canvas.ignoresSafeArea()
-            GeometryReader { vp in
-                redGlow
-                    .position(x: vp.size.width / 2
-                                + CGFloat(sin(Double(scrollY) / 150)) * vp.size.width * 0.34,
-                              y: vp.size.height * 0.42
-                                + CGFloat(sin(Double(scrollY) / 260)) * vp.size.height * 0.16)
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     hero
@@ -67,16 +58,6 @@ struct PathView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    /// A soft red gradient blur that rides along with the scroll and weaves
-    /// side to side, drifting around the path behind the dots.
-    private var redGlow: some View {
-        RadialGradient(colors: [Palette.brandRed.opacity(0.5),
-                                Palette.accentRedDeep.opacity(0.22), .clear],
-                       center: .center, startRadius: 0, endRadius: 170)
-            .frame(width: 340, height: 340)
-            .blur(radius: 70)
     }
 
     private var hero: some View {
@@ -242,10 +223,11 @@ struct PathView: View {
                    border: Palette.brandRed.opacity(0.30), borderWidth: 1,
                    symbol: "checkmark", symbolColor: Palette.brandRed.opacity(0.85))
         case .today:
-            circle(center: Palette.brandRed.opacity(0.26), edge: .clear,
-                   border: Palette.brandRed.opacity(0.45), borderWidth: 1.5,
-                   symbol: ExerciseTile.symbol(for: day.entries.first?.exerciseID ?? ""),
-                   symbolColor: Palette.accentRed)
+            orb(center: Palette.brandRed.opacity(0.26), edge: .clear,
+                border: Palette.brandRed.opacity(0.45), borderWidth: 1.5)
+                .overlay(ExercisePoseIcon(exerciseID: day.entries.first?.exerciseID ?? "",
+                                          color: Palette.accentRed)
+                    .frame(width: nodeSize * 0.56, height: nodeSize * 0.56))
                 .scaleEffect(1.1)   // today reads a touch larger, still soft
         case .lockedNext, .locked:
             circle(center: Palette.surfaceCard.opacity(0.85), edge: .clear,
@@ -256,13 +238,17 @@ struct PathView: View {
 
     /// A soft orb whose fill fades from `center` to `edge` so nodes melt into
     /// the background rather than sitting as hard chips.
-    private func circle(center: Color, edge: Color, border: Color, borderWidth: CGFloat,
-                        symbol: String, symbolColor: Color) -> some View {
+    private func orb(center: Color, edge: Color, border: Color, borderWidth: CGFloat) -> some View {
         Circle()
             .fill(RadialGradient(colors: [center, edge], center: .center,
                                  startRadius: 1, endRadius: nodeSize / 2))
             .frame(width: nodeSize, height: nodeSize)
             .overlay(Circle().stroke(border, lineWidth: borderWidth))
+    }
+
+    private func circle(center: Color, edge: Color, border: Color, borderWidth: CGFloat,
+                        symbol: String, symbolColor: Color) -> some View {
+        orb(center: center, edge: edge, border: border, borderWidth: borderWidth)
             .overlay(Image(systemName: symbol)
                 .font(.system(size: nodeSize * 0.38, weight: .medium))
                 .foregroundStyle(symbolColor))
