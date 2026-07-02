@@ -16,6 +16,13 @@ struct ConsistencyCalendarView: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(color(for: columns[c][r]))
                             .frame(width: 12, height: 12)
+                            .overlay {
+                                // Ring marking today, so "now" is findable even before a workout.
+                                if let day = columns[c][r], calendar.isDateInToday(day) {
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .stroke(Palette.hairlineStrong, lineWidth: 1)
+                                }
+                            }
                     }
                 }
             }

@@ -77,7 +77,7 @@ struct PremadePlansView: View {
     }
 
     private func card(_ plan: PremadePlan, onDelete: (() -> Void)?) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             HStack(alignment: .top) {
                 Text(plan.name).typography(Typography.headingSm).foregroundStyle(Palette.ink)
                 Spacer()
@@ -89,7 +89,13 @@ struct PremadePlansView: View {
                 }
             }
             Text(plan.summary).typography(Typography.bodySm).foregroundStyle(Palette.mute)
-            Text(exerciseSummary(plan)).typography(Typography.captionMd).foregroundStyle(Palette.stone)
+            HStack(spacing: Spacing.sm) {
+                ForEach(exerciseIDs(plan), id: \.self) { id in
+                    ExerciseTile(exerciseID: id, size: 32)
+                }
+                Text(setsText(plan)).typography(Typography.captionMd).foregroundStyle(Palette.stone)
+                    .padding(.leading, Spacing.xs)
+            }
         }
         .card()
     }
@@ -99,9 +105,13 @@ struct PremadePlansView: View {
         return "~\(minutes) min"
     }
 
-    private func exerciseSummary(_ plan: PremadePlan) -> String {
-        plan.entries
-            .map { entry in ExerciseRegistry.displayName(for: entry.exerciseID) }
-            .joined(separator: " · ")
+    private func exerciseIDs(_ plan: PremadePlan) -> [String] {
+        var seen = Set<String>()
+        return plan.entries.compactMap { seen.insert($0.exerciseID).inserted ? $0.exerciseID : nil }
+    }
+
+    private func setsText(_ plan: PremadePlan) -> String {
+        let sets = plan.entries.reduce(0) { $0 + $1.sets }
+        return "\(sets) sets · \(plan.restSeconds)s rest"
     }
 }

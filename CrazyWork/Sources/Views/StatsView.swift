@@ -13,13 +13,17 @@ struct StatsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     HeroStripeBand {
-                        Text("Stats").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("Stats").typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                            if let since = sinceText {
+                                Text(since).typography(Typography.bodyMd).foregroundStyle(Palette.mute)
+                            }
+                        }
                     }
                     if sessions.isEmpty {
-                        ContentUnavailableView("No workouts yet",
-                                               systemImage: "chart.xyaxis.line",
-                                               description: Text("Complete a workout to see your progress."))
-                            .frame(maxWidth: .infinity, minHeight: 320)
+                        EmptyState(icon: "chart.xyaxis.line",
+                                   title: "No stats yet",
+                                   message: "Finish your first workout and your progress shows up here.")
                     } else {
                         statsContent(stats)
                     }
@@ -34,15 +38,25 @@ struct StatsView: View {
         ProgressStats(summaries: sessions.map(\.summary))
     }
 
+    /// "12 workouts since March" — the hero's one-line lifetime summary.
+    private var sinceText: String? {
+        guard let first = sessions.first else { return nil }
+        let month = first.startedAt.formatted(.dateTime.month(.wide))
+        let count = sessions.count
+        return "\(count) workout\(count == 1 ? "" : "s") since \(month)"
+    }
+
     private func statsContent(_ stats: ProgressStats) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xl) {
             cards(stats)
-            HealthMetricsCard()
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Text("Consistency").typography(Typography.headingMd).foregroundStyle(Palette.ink)
                 ConsistencyCalendarView(workoutDays: stats.workoutDays)
+                    .frame(maxWidth: .infinity)
+                    .card(padding: Spacing.lg)
             }
             trends(stats)
+            HealthMetricsCard()
         }
         .padding(.horizontal, Spacing.lg)
     }
@@ -59,49 +73,56 @@ struct StatsView: View {
     }
 
     private func statCard(_ title: String, _ value: String, _ icon: String, accent: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Label(title, systemImage: icon).typography(Typography.captionMd).foregroundStyle(Palette.mute)
-            Text(value).typography(Typography.headingXl)
-                .foregroundStyle(accent ? Palette.brandRed : Palette.ink)
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            RoundedRectangle(cornerRadius: Radii.sm)
+                .fill(accent ? Palette.brandRedSoft : Palette.surfaceCard)
+                .frame(width: 28, height: 28)
+                .overlay(Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(accent ? Palette.accentRedBright : Palette.body))
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(value).font(Typography.numeral(28))
+                    .foregroundStyle(accent ? Palette.brandRed : Palette.ink)
+                Text(title).typography(Typography.captionMd).foregroundStyle(Palette.mute)
+            }
         }
-        .card(surface: Palette.surfaceElevated)
+        .card(surface: Palette.surfaceElevated, padding: Spacing.lg)
     }
 
     private func trends(_ stats: ProgressStats) -> some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
-            chartCard("Reps per workout", color: Palette.brandRed) {
-                Chart(stats.summaries, id: \.date) { s in
-                    LineMark(x: .value("Date", s.date), y: .value("Reps", s.reps))
-                        .foregroundStyle(Palette.brandRed)
-                }
-            }
-            chartCard("Hold seconds per workout", color: Palette.accentAqua) {
-                Chart(stats.summaries, id: \.date) { s in
-                    LineMark(x: .value("Date", s.date), y: .value("Seconds", s.holdSeconds))
-                        .foregroundStyle(Palette.accentAqua)
-                }
-            }
-            chartCard("Form % per workout", color: Palette.accentGreen) {
-                Chart(stats.summaries, id: \.date) { s in
-                    LineMark(x: .value("Date", s.date), y: .value("Form %", s.formScore * 100))
-                        .foregroundStyle(Palette.accentGreen)
-                }
-                .chartYScale(domain: 0...100)
-            }
+            trendCard("Reps per workout", color: Palette.brandRed, stats: stats) { Double($0.reps) }
+            trendCard("Hold seconds per workout", color: Palette.accentAqua, stats: stats) { Double($0.holdSeconds) }
+            trendCard("Form % per workout", color: Palette.accentGreen, stats: stats,
+                      domain: 0...100) { $0.formScore * 100 }
         }
     }
 
-    @ViewBuilder
-    private func chartCard<Content: View>(_ title: String, color: Color,
-                                          @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(title).typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
-            content()
-                .frame(height: 160)
-                .chartXAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
-                .chartYAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
+    /// A trend line in the strand voice: a smooth curve with the series color
+    /// dissolving into the canvas beneath it, and a point on the latest value.
+    private func trendCard(_ title: String, color: Color, stats: ProgressStats,
+                           domain: ClosedRange<Double>? = nil,
+                           value: @escaping (SessionSummary) -> Double) -> some View {
+        let last = stats.summaries.last
+        return ChartCard(title: title) {
+            Chart {
+                ForEach(stats.summaries, id: \.date) { s in
+                    AreaMark(x: .value("Date", s.date), y: .value(title, value(s)))
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(LinearGradient.trendFill(color))
+                    LineMark(x: .value("Date", s.date), y: .value(title, value(s)))
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        .foregroundStyle(color)
+                }
+                if let last {
+                    PointMark(x: .value("Date", last.date), y: .value(title, value(last)))
+                        .symbolSize(40)
+                        .foregroundStyle(color)
+                }
+            }
+            .modifier(OptionalYDomain(domain: domain))
         }
-        .card()
     }
 
     static func clock(_ seconds: Int) -> String {
@@ -113,5 +134,13 @@ struct StatsView: View {
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+    }
+}
+
+/// Applies a fixed Y domain only when one is given (form % pins to 0–100).
+private struct OptionalYDomain: ViewModifier {
+    let domain: ClosedRange<Double>?
+    func body(content: Content) -> some View {
+        if let domain { content.chartYScale(domain: domain) } else { content }
     }
 }

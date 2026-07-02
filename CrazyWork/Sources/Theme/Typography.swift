@@ -49,6 +49,17 @@ enum Typography {
     }
 
     static func font(_ t: Token) -> Font { Font(uiFont(size: t.size, weight: t.weight, tier: t.tier)) }
+
+    /// The stat-numeral voice: Inter SemiBold in the display cut with tabular
+    /// figures, so live counters and stat grids don't jitter as digits change.
+    static func numeral(_ size: CGFloat) -> Font {
+        let base = uiFont(size: size, weight: .semibold, tier: .display)
+        var feats = (base.fontDescriptor.fontAttributes[.featureSettings]
+                     as? [[UIFontDescriptor.FeatureKey: Int]]) ?? []
+        feats.append([.type: kNumberSpacingType, .selector: kMonospacedNumbersSelector])
+        let desc = base.fontDescriptor.addingAttributes([.featureSettings: feats])
+        return Font(UIFont(descriptor: desc, size: size))
+    }
 }
 
 struct TypographyStyle: ViewModifier {

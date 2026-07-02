@@ -35,7 +35,7 @@ struct WorkoutShareCard: View {
 
     private func stat(_ value: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(value).typography(Typography.headingXl).foregroundStyle(Palette.brandRed)
+            Text(value).font(Typography.numeral(28)).foregroundStyle(Palette.brandRed)
             Text(label).typography(Typography.captionSm).foregroundStyle(Palette.mute)
         }
     }

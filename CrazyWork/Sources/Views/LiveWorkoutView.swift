@@ -88,11 +88,10 @@ struct LiveWorkoutView: View {
 
             VStack(spacing: 2) {
                 Text(progressText)
-                    .font(.system(size: 64, weight: .bold, design: .rounded))
-                    .monospacedDigit()
+                    .font(Typography.numeral(56))
                     .foregroundStyle(.white)
                 Text("Set \(coordinator.currentSetIndex + 1) of \(plan.count) · \(exerciseName)")
-                    .font(.headline)
+                    .typography(Typography.bodyStrong)
                     .foregroundStyle(.white.opacity(0.8))
             }
         }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct Badge: View {
-    enum Style { case pro, redSoft, aquaSoft, infoSoft }
+    enum Style { case pro, redSoft, aquaSoft, infoSoft, greenSoft }
     let text: String
     var style: Style = .pro
 
@@ -11,6 +11,7 @@ struct Badge: View {
         case .redSoft:  return (Palette.brandRedSoft, Palette.accentRedBright)
         case .aquaSoft: return (Palette.accentAquaSoft, Palette.accentAquaBright)
         case .infoSoft: return (Palette.accentBlueSoft, Palette.accentBlue)
+        case .greenSoft: return (Palette.accentGreenSoft, Palette.accentGreen)
         }
     }
 

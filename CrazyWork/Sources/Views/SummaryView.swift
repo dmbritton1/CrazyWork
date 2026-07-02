@@ -72,70 +72,95 @@ struct SummaryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.xl) {
-                Text("Workout Complete").typography(Typography.displayLg).foregroundStyle(Palette.ink)
-
-                if !rows.isEmpty {
-                    chartCard("Volume per set") {
-                        Chart(rows) { row in
-                            BarMark(x: .value("Set", row.setLabel),
-                                    y: .value("Done", row.completed))
-                                .foregroundStyle(Palette.brandRed)
-                        }
-                    }
-
-                    chartCard("Form per set") {
-                        Chart(rows) { row in
-                            BarMark(x: .value("Set", row.setLabel),
-                                    y: .value("Form %", row.formPct))
-                                .foregroundStyle(Palette.accentAqua)
-                        }
-                        .chartYScale(domain: 0...100)
+                HeroStripeBand {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text("Workout Complete")
+                            .typography(Typography.displayLg).foregroundStyle(Palette.ink)
+                        Text(exercisesText).typography(Typography.bodyMd).foregroundStyle(Palette.mute)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    ForEach(rows) { row in
-                        HStack {
-                            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                                Text("\(row.setLabel) · \(row.exercise)")
-                                    .typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
-                                Text(row.detail).typography(Typography.bodySm).foregroundStyle(Palette.mute)
+                VStack(alignment: .leading, spacing: Spacing.xl) {
+                    totalsCard
+
+                    if !rows.isEmpty {
+                        ChartCard(title: "Volume per set", height: 180) {
+                            Chart(rows) { row in
+                                BarMark(x: .value("Set", row.setLabel),
+                                        y: .value("Done", row.completed))
+                                    .cornerRadius(3)
+                                    .foregroundStyle(LinearGradient(
+                                        colors: [Palette.brandRed, Palette.accentRedDeep],
+                                        startPoint: .top, endPoint: .bottom))
                             }
-                            Spacer()
-                            Text("\(Int(row.formPct))% form")
-                                .typography(Typography.bodySm).foregroundStyle(Palette.body)
                         }
-                        .card()
-                    }
-                }
 
-                if let image = shareImage() {
-                    ShareLink(item: image,
-                              preview: SharePreview("My CrazyWork workout", image: image)) {
-                        Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
+                        ChartCard(title: "Form per set", height: 180) {
+                            Chart(rows) { row in
+                                BarMark(x: .value("Set", row.setLabel),
+                                        y: .value("Form %", row.formPct))
+                                    .cornerRadius(3)
+                                    .foregroundStyle(LinearGradient(
+                                        colors: [Palette.accentAqua, Palette.accentTealDeep],
+                                        startPoint: .top, endPoint: .bottom))
+                            }
+                            .chartYScale(domain: 0...100)
+                        }
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                }
 
-                Button("Done") { dismiss() }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        ForEach(rows) { row in
+                            HStack {
+                                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                    Text("\(row.setLabel) · \(row.exercise)")
+                                        .typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
+                                    Text(row.detail).typography(Typography.bodySm).foregroundStyle(Palette.mute)
+                                }
+                                Spacer()
+                                Text("\(Int(row.formPct))% form")
+                                    .typography(Typography.bodySm).foregroundStyle(Palette.body)
+                            }
+                            .card(padding: Spacing.lg)
+                        }
+                    }
+
+                    if let image = shareImage() {
+                        ShareLink(item: image,
+                                  preview: SharePreview("My CrazyWork workout", image: image)) {
+                            Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                    }
+
+                    Button("Done") { dismiss() }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, Spacing.lg)
             }
-            .padding(Spacing.lg)
+            .padding(.bottom, Spacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.canvas)
     }
 
-    @ViewBuilder
-    private func chartCard<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(title).typography(Typography.bodyStrong).foregroundStyle(Palette.ink)
-            content()
-                .frame(height: 180)
-                .chartXAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
-                .chartYAxis { AxisMarks { AxisGridLine().foregroundStyle(Palette.hairline) } }
+    /// The headline moment: three big numerals for what the session produced.
+    private var totalsCard: some View {
+        HStack(alignment: .top) {
+            total("\(totalReps)", "reps", accent: true)
+            Spacer()
+            total(LiveWorkoutView.clock(totalHoldSeconds), "held")
+            Spacer()
+            total("\(averageFormPct)%", "form")
         }
-        .card()
+        .card(surface: Palette.surfaceElevated)
+    }
+
+    private func total(_ value: String, _ label: String, accent: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(value).font(Typography.numeral(32))
+                .foregroundStyle(accent ? Palette.brandRed : Palette.ink)
+            Text(label).typography(Typography.captionSm).foregroundStyle(Palette.mute)
+        }
     }
 }

@@ -27,7 +27,7 @@ struct HealthMetricsCard: View {
 
     private func tile(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(value).typography(Typography.headingXl).foregroundStyle(Palette.ink)
+            Text(value).font(Typography.numeral(24)).foregroundStyle(Palette.ink)
             Text(title).typography(Typography.captionSm).foregroundStyle(Palette.mute)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

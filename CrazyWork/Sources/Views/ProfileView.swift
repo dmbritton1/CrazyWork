@@ -97,9 +97,16 @@ struct ProfileView: View {
     }
 
     private var headerCard: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            TextField("Name", text: $displayName)
-                .typography(Typography.headingMd).foregroundStyle(Palette.ink)
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            HStack(spacing: Spacing.md) {
+                Circle().fill(Palette.surfaceCard)
+                    .frame(width: 48, height: 48)
+                    .overlay(Circle().stroke(Palette.hairline, lineWidth: 1))
+                    .overlay(Text(String(displayName.prefix(1)).uppercased())
+                        .typography(Typography.headingMd).foregroundStyle(Palette.ink))
+                TextField("Name", text: $displayName)
+                    .typography(Typography.headingMd).foregroundStyle(Palette.ink)
+            }
             HStack {
                 stat("Workouts", "\(stats.totalWorkouts)")
                 Spacer()
@@ -210,7 +217,7 @@ struct ProfileView: View {
 
     private func stat(_ title: String, _ value: String, accent: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(value).typography(Typography.headingXl)
+            Text(value).font(Typography.numeral(28))
                 .foregroundStyle(accent ? Palette.brandRed : Palette.ink)
             Text(title).typography(Typography.captionSm).foregroundStyle(Palette.mute)
         }

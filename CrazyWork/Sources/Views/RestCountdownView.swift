@@ -22,8 +22,7 @@ struct RestCountdownView: View {
         VStack(spacing: Spacing.md) {
             Text("Rest").typography(Typography.headingLg).foregroundStyle(.white)
             Text(LiveWorkoutView.clock(Double(remaining)))
-                .font(.system(size: 64, weight: .bold, design: .rounded))
-                .monospacedDigit()
+                .font(Typography.numeral(64))
                 .foregroundStyle(.white)
             HStack(spacing: Spacing.sm) {
                 Text("Next").typography(Typography.bodySm).foregroundStyle(.white.opacity(0.7))
