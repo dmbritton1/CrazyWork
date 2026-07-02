@@ -9,6 +9,7 @@ struct PathView: View {
     @AppStorage("pathLastCompletedDay") private var pathLastCompletedDay = Int.min
     @State private var scrollY: CGFloat = 0
     @State private var selectedNode: NodeSelection?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
 
     /// A tapped node: which day, and whether it's the current (startable) one.
@@ -116,7 +117,19 @@ struct PathView: View {
             ZStack(alignment: .topLeading) {
                 flowLine(height: height, cx: cx, amp: amp)
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
-                    nodeView(nodeIndex).position(points[local])
+                    nodeView(nodeIndex)
+                        // Depth-of-field: the node nearest the viewport center
+                        // is crisp and full-size; nodes recede toward the edges.
+                        .visualEffect { [reduceMotion] content, proxy in
+                            let t = reduceMotion ? 0 : Self.focusT(
+                                midY: proxy.frame(in: .scrollView).midY,
+                                viewportHeight: proxy.bounds(of: .scrollView)?.height ?? 0)
+                            return content
+                                .scaleEffect(1 - 0.16 * t)
+                                .opacity(1 - 0.5 * t)
+                                .blur(radius: 2.5 * t)
+                        }
+                        .position(points[local])
                 }
             }
         }
@@ -189,6 +202,14 @@ struct PathView: View {
         let sign: CGFloat = curvature >= 0 ? 1 : -1
         let strength = min(1, CGFloat(abs(curvature)) * 2200)
         return sign * (38 + 46 * strength)
+    }
+
+    /// Depth-of-field falloff: 0 when a node's midY sits at the viewport
+    /// center, rising to 1 at the top/bottom edge (clamped beyond).
+    static func focusT(midY: CGFloat, viewportHeight: CGFloat) -> CGFloat {
+        guard viewportHeight > 0 else { return 0 }
+        let half = viewportHeight / 2
+        return min(1, abs(midY - half) / half)
     }
 
     @ViewBuilder
