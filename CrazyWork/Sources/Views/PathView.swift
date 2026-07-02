@@ -115,7 +115,8 @@ struct PathView: View {
                 return CGPoint(x: min(cx + maxOff, max(cx - maxOff, x)), y: y)
             }
             ZStack(alignment: .topLeading) {
-                flowLine(height: height, cx: cx, amp: amp)
+                flowLine(height: height, cx: cx, amp: amp,
+                         drift: reduceMotion ? 0 : scrollY)
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
                     nodeView(nodeIndex)
                         // Depth-of-field: the node nearest the viewport center
@@ -150,18 +151,26 @@ struct PathView: View {
     /// An abstract red ribbon that meanders on its own — wider amplitude and a
     /// different rhythm than the dots, so it weaves around them rather than
     /// connecting them — with two fainter offset echoes for depth.
-    private func flowLine(height: CGFloat, cx: CGFloat, amp: CGFloat) -> some View {
+    private func flowLine(height: CGFloat, cx: CGFloat, amp: CGFloat, drift: CGFloat) -> some View {
         // Several grey strands sharing the spine but each with its own phase and
         // high-frequency wiggle, so the band reads as a complex woven line.
         let main = ribbonPath(height: height, cx: cx, amp: amp, wiggleAmp: 0.06, wiggleFreq: 0.061)
         let a = ribbonPath(height: height, cx: cx, amp: amp, phase: 1.3, wiggleAmp: 0.11, wiggleFreq: 0.049)
         let b = ribbonPath(height: height, cx: cx, amp: amp, phase: 3.7, wiggleAmp: 0.15, wiggleFreq: 0.034)
         let stroke = { (w: CGFloat) in StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round) }
+        // Parallax: each echo drifts vertically at its own small rate as you
+        // scroll, so the woven band separates into near/far layers. The
+        // central strand stays locked to the nodes. Strands overrun both
+        // edges by rowHeight in ribbonPath, which covers the largest drift.
         return ZStack {
-            main.stroke(Palette.hairlineStrong, style: stroke(1.4)).offset(x: 46).opacity(0.30)
-            main.stroke(Palette.hairlineStrong, style: stroke(1.4)).offset(x: -50).opacity(0.26)
-            a.stroke(Palette.hairlineStrong, style: stroke(1.3)).offset(x: 22).opacity(0.40)
-            b.stroke(Palette.hairlineStrong, style: stroke(1.3)).offset(x: -24).opacity(0.40)
+            main.stroke(Palette.hairlineStrong, style: stroke(1.4))
+                .offset(x: 46, y: drift * 0.06).opacity(0.30)
+            main.stroke(Palette.hairlineStrong, style: stroke(1.4))
+                .offset(x: -50, y: drift * -0.08).opacity(0.26)
+            a.stroke(Palette.hairlineStrong, style: stroke(1.3))
+                .offset(x: 22, y: drift * 0.03).opacity(0.40)
+            b.stroke(Palette.hairlineStrong, style: stroke(1.3))
+                .offset(x: -24, y: drift * -0.04).opacity(0.40)
             main.stroke(Palette.mute.opacity(0.45), style: stroke(2))   // central strand, grey
         }
     }
