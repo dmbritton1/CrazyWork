@@ -5,9 +5,6 @@ import Observation
 /// Runs the real workout session on the watch: collects heart rate and active
 /// energy via HKLiveWorkoutBuilder, mirrors the session to the phone, and
 /// streams metric snapshots over the mirrored data channel.
-///
-/// Phase 1: the session is DISCARDED at the end — the phone still writes the
-/// HKWorkout. Task 7 (phase 2) switches this to finishWorkout + `.ended` ack.
 @MainActor
 @Observable
 final class WatchSessionController: NSObject {
@@ -44,17 +41,24 @@ final class WatchSessionController: NSObject {
         }
     }
 
-    /// Stop collecting and throw the data away (phase 1 behavior — the phone
-    /// owns the saved workout until Task 7).
+    /// Stop collecting, save the workout (rings credit, measured calories),
+    /// and tell the phone the measured total via `.ended`.
     func end() {
         session?.stopActivity(with: Date())
         session?.end()
+        let session = session
         let builder = builder
         Task { @MainActor in
             try? await builder?.endCollection(at: Date())
-            builder?.discardWorkout()
+            let workout = try? await builder?.finishWorkout()
+            let kcal = workout?.statistics(for: HKQuantityType(.activeEnergyBurned))?
+                .sumQuantity()?
+                .doubleValue(for: .kilocalorie()) ?? 0
+            if let session, let data = try? WatchMessage.ended(activeEnergyKcal: kcal).encoded() {
+                session.sendToRemoteWorkoutSession(data: data) { _, _ in }
+            }
         }
-        session = nil
+        self.session = nil
         self.builder = nil
         isRunning = false
         heartRate = nil

@@ -208,6 +208,10 @@ struct LiveWorkoutView: View {
         let start = session.startedAt
         let end = session.endedAt ?? Date()
         Task {
+            let watchAcked = await watchMirror.end()
+            let owner = WorkoutSaveOwner.decide(watchAcknowledgedEnd: watchAcked,
+                                                watchEnergyKcal: watchMirror.watchEndedEnergyKcal)
+            guard owner == .phone else { return } // watch already saved measured workout
             let body = await HealthStore.shared.body()
             let minutes = max(0, end.timeIntervalSince(start)) / 60
             let kcal = CalorieEstimator.kilocalories(results: results, durationMinutes: minutes, body: body)
