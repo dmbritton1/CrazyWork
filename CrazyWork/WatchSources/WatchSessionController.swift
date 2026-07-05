@@ -29,11 +29,13 @@ final class WatchSessionController: NSObject {
                                                          workoutConfiguration: config)
             session.delegate = self
             builder.delegate = self
+            // Store before the throwing starts so the catch's end() can
+            // actually stop a session that already began activity.
+            self.session = session
+            self.builder = builder
             try await session.startMirroringToCompanionDevice()
             session.startActivity(with: Date())
             try await builder.beginCollection(at: Date())
-            self.session = session
-            self.builder = builder
             isRunning = true
         } catch {
             // Watch-side failure is non-fatal by design; phone continues alone.
@@ -50,10 +52,20 @@ final class WatchSessionController: NSObject {
         let builder = builder
         Task { @MainActor in
             try? await builder?.endCollection(at: Date())
-            let workout = try? await builder?.finishWorkout()
-            let kcal = workout?.statistics(for: HKQuantityType(.activeEnergyBurned))?
+            // Mirror WorkoutSaveOwner: the watch saves only when it measured
+            // energy AND the save succeeded; otherwise discard and ack 0 so
+            // the phone writes its estimate. Ack kcal > 0 == "I saved".
+            let measured = builder?.statistics(for: HKQuantityType(.activeEnergyBurned))?
                 .sumQuantity()?
                 .doubleValue(for: .kilocalorie()) ?? 0
+            var kcal = 0.0
+            if measured > 0, let workout = try? await builder?.finishWorkout() {
+                kcal = workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
+                    .sumQuantity()?
+                    .doubleValue(for: .kilocalorie()) ?? measured
+            } else {
+                builder?.discardWorkout()
+            }
             if let session, let data = try? WatchMessage.ended(activeEnergyKcal: kcal).encoded() {
                 session.sendToRemoteWorkoutSession(data: data) { _, _ in }
             }

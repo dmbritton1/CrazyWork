@@ -161,7 +161,11 @@ struct LiveWorkoutView: View {
 
     private func run() async {
         coordinator.start()
-        Task { await watchMirror.start() } // best-effort; no watch = no-op
+        // Watch session writes HR samples and workouts to Health, so the
+        // health-sync opt-out gates it, same as the phone's save path.
+        if healthSyncEnabled {
+            Task { await watchMirror.start() } // best-effort; no watch = no-op
+        }
         audioPlayer.muted = !audioEnabled
         UIApplication.shared.isIdleTimerDisabled = true // keep the screen awake mid-workout
         guard await CameraAuthorization.request() else {
