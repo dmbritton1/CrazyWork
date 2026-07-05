@@ -17,6 +17,7 @@ struct LiveWorkoutView: View {
     @State private var cameraDenied = false
     @State private var saved = false
     @State private var audioPlayer = WorkoutAudioPlayer()
+    @State private var watchMirror = WatchWorkoutMirror()
     @AppStorage("workoutAudioEnabled") private var audioEnabled = true
     @AppStorage("healthSyncEnabled") private var healthSyncEnabled = false
 
@@ -67,6 +68,7 @@ struct LiveWorkoutView: View {
             pipeline.stop()
             UIApplication.shared.isIdleTimerDisabled = false // let the screen sleep again
             audioPlayer.end()
+            Task { _ = await watchMirror.end() }
         }
         .onChange(of: audioEnabled) { _, enabled in audioPlayer.muted = !enabled }
     }
@@ -93,6 +95,11 @@ struct LiveWorkoutView: View {
                 Text("Set \(coordinator.currentSetIndex + 1) of \(plan.count) · \(exerciseName)")
                     .typography(Typography.bodyStrong)
                     .foregroundStyle(.white.opacity(0.8))
+                if let hr = watchMirror.latestHeartRate {
+                    Label("\(Int(hr))", systemImage: "heart.fill")
+                        .typography(Typography.bodyStrong)
+                        .foregroundStyle(Palette.brandRed)
+                }
             }
         }
         .padding()
@@ -154,6 +161,7 @@ struct LiveWorkoutView: View {
 
     private func run() async {
         coordinator.start()
+        Task { await watchMirror.start() } // best-effort; no watch = no-op
         audioPlayer.muted = !audioEnabled
         UIApplication.shared.isIdleTimerDisabled = true // keep the screen awake mid-workout
         guard await CameraAuthorization.request() else {
