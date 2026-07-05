@@ -133,12 +133,14 @@ struct ProfileView: View {
                 get: { availableVoices.contains { $0.identifier == voiceID } ? voiceID : "" },
                 set: { voiceID = $0 }
             )) {
-                Text("Default").tag("")
+                Text("Auto (best quality)").tag("")
                 ForEach(availableVoices, id: \.identifier) { voice in
-                    Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
+                    Text(voiceLabel(voice)).tag(voice.identifier)
                 }
             }
             .tint(Palette.body)
+            Text("For more natural voices, download one in Settings → Accessibility → Spoken Content → Voices.")
+                .typography(Typography.captionSm).foregroundStyle(Palette.mute)
             Button { previewVoice() } label: {
                 Label("Preview voice", systemImage: "speaker.wave.2.fill")
             }
@@ -193,7 +195,20 @@ struct ProfileView: View {
         let all = AVSpeechSynthesisVoice.speechVoices()
         let lang = Locale.current.language.languageCode?.identifier ?? "en"
         let matched = all.filter { $0.language.hasPrefix(lang) }
-        return (matched.isEmpty ? all : matched).sorted { $0.name < $1.name }
+        return (matched.isEmpty ? all : matched).sorted {
+            $0.quality.rawValue != $1.quality.rawValue
+                ? $0.quality.rawValue > $1.quality.rawValue
+                : $0.name < $1.name
+        }
+    }
+
+    private func voiceLabel(_ voice: AVSpeechSynthesisVoice) -> String {
+        let base = "\(voice.name) (\(voice.language))"
+        switch voice.quality {
+        case .premium: return base + " — Premium"
+        case .enhanced: return base + " — Enhanced"
+        default: return base
+        }
     }
 
     private func apply(_ preset: OverlayPreset) {
@@ -209,9 +224,7 @@ struct ProfileView: View {
         previewSynth.delegate = speechEnder
         let utterance = AVSpeechUtterance(string: "Three. Nice work!")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        if !voiceID.isEmpty, let voice = AVSpeechSynthesisVoice(identifier: voiceID) {
-            utterance.voice = voice
-        }
+        utterance.voice = AVSpeechSynthesisVoice.preferred(id: voiceID)
         previewSynth.speak(utterance)
     }
 

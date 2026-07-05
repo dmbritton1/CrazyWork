@@ -47,10 +47,7 @@ final class WorkoutAudioPlayer {
         case let .speak(text):
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-            if let id = UserDefaults.standard.string(forKey: "voiceID"), !id.isEmpty,
-               let voice = AVSpeechSynthesisVoice(identifier: id) {
-                utterance.voice = voice
-            }
+            utterance.voice = AVSpeechSynthesisVoice.preferred(id: UserDefaults.standard.string(forKey: "voiceID"))
             synthesizer.speak(utterance)
         }
     }
@@ -61,5 +58,20 @@ final class WorkoutAudioPlayer {
         try? session.setCategory(.playback, options: .duckOthers)
         try? session.setActive(true)
         sessionActive = true
+    }
+}
+
+extension AVSpeechSynthesisVoice {
+    /// The saved voice if it's still installed; otherwise the highest-quality
+    /// installed voice for the current language (premium > enhanced > default).
+    /// `nil` lets the synthesizer fall back to the system default.
+    static func preferred(id: String?) -> AVSpeechSynthesisVoice? {
+        if let id, !id.isEmpty, let voice = AVSpeechSynthesisVoice(identifier: id) {
+            return voice
+        }
+        let lang = Locale.current.language.languageCode?.identifier ?? "en"
+        return speechVoices()
+            .filter { $0.language.hasPrefix(lang) }
+            .max { $0.quality.rawValue < $1.quality.rawValue }
     }
 }
