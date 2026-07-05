@@ -19,6 +19,7 @@ targets:
     sources: [Sources]
     dependencies:
       - package: ChallengeCore
+      - target: CrazyWorkWatch
     scheme:
       testTargets:
         - CrazyWorkTests
@@ -34,6 +35,27 @@ targets:
           - Inter-Medium.ttf
           - Inter-SemiBold.ttf
         UILaunchScreen: {}
+  CrazyWorkWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "11.0"
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        DEVELOPMENT_TEAM: "7684T6LK27"
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.dmbritton.CrazyWork.watchkitapp
+        CODE_SIGN_ENTITLEMENTS: WatchSources/CrazyWorkWatch.entitlements
+    sources:
+      - WatchSources
+      - Sources/Shared
+    info:
+      path: WatchSources/Info.plist
+      properties:
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.dmbritton.CrazyWork
+        NSHealthShareUsageDescription: "CrazyWork measures your heart rate during workouts."
+        NSHealthUpdateUsageDescription: "CrazyWork saves your workouts to Apple Health."
   CrazyWorkTests:
     type: bundle.unit-test
     platform: iOS
