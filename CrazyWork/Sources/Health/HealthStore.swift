@@ -11,6 +11,7 @@ final class HealthStore {
 
     private var readTypes: Set<HKObjectType> {
         [HKQuantityType(.bodyMass), HKQuantityType(.height),
+         HKQuantityType(.heartRate),
          HKCharacteristicType(.dateOfBirth), HKCharacteristicType(.biologicalSex)]
     }
 
