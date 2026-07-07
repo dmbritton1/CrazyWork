@@ -525,6 +525,131 @@ public struct WallSitAnalyzer: ExerciseAnalyzer {
     }
 }
 
+/// Jumping jacks: the app's first front-facing exercise. Two smoothed signals —
+/// arm raise (hip·shoulder·wrist, ~20° at the sides to ~170° overhead) and leg
+/// spread (leftAnkle·root·rightAnkle, ~15° together to ~45° apart) — drive a
+/// two-state machine. Both signals must clear a gate on the same smoothed frame
+/// to change state, so arm-only half-jacks and out-of-sync legs never count;
+/// the band between the open and closed thresholds is the hysteresis margin.
+/// A closed → open → closed cycle is one rep, subject to a minimum cycle
+/// duration measured from leaving `closed` to re-entering it. No form cues.
+public struct JumpingJackAnalyzer: ExerciseAnalyzer {
+    public let definition = ExerciseDefinition(id: "jumpingjack", displayName: "Jumping Jack", goalUnit: .reps, met: 8.0)
+
+    private let armOpen: Double
+    private let armClosed: Double
+    private let legOpen: Double
+    private let legClosed: Double
+    private let minCycleDuration: TimeInterval
+    private let smoothingWindow: Int
+    private let minConfidence: Double
+
+    private var armSmoother: MovingAverage
+    private var legSmoother: MovingAverage
+    /// Last smoothed values; held across unjudgeable frames so a brief joint
+    /// dropout can't reset the cycle.
+    private var lastArm: Double?
+    private var lastLeg: Double?
+
+    private enum State { case unknown, closed, open }
+    private var state: State = .unknown
+    /// Timestamp of the frame that left `closed` (entered `open`); nil outside
+    /// a cycle, so a cycle that began mid-open never counts.
+    private var cycleStart: TimeInterval?
+    private var count = 0
+
+    public var progress: Double { Double(count) }
+
+    public init(armOpen: Double = 140, armClosed: Double = 60,
+                legOpen: Double = 35, legClosed: Double = 20,
+                minCycleDuration: TimeInterval = 0.35,
+                smoothingWindow: Int = 5, minConfidence: Double = 0.5) {
+        self.armOpen = armOpen
+        self.armClosed = armClosed
+        self.legOpen = legOpen
+        self.legClosed = legClosed
+        self.minCycleDuration = minCycleDuration
+        self.smoothingWindow = smoothingWindow
+        self.minConfidence = minConfidence
+        self.armSmoother = MovingAverage(windowSize: smoothingWindow)
+        self.legSmoother = MovingAverage(windowSize: smoothingWindow)
+    }
+
+    public mutating func process(_ frame: PoseFrame) -> AnalyzerResult {
+        let armRaw = armAngle(frame)
+        let legRaw = legAngle(frame)
+        if let armRaw { lastArm = armSmoother.add(armRaw) }
+        if let legRaw { lastLeg = legSmoother.add(legRaw) }
+        let visible = armRaw != nil || legRaw != nil
+
+        // Until both signals have been seen once there is nothing to judge.
+        guard let arm = lastArm, let leg = lastLeg else {
+            return AnalyzerResult(progress: Double(count), didAdvance: false, poseVisible: visible, formCue: nil)
+        }
+
+        var didAdvance = false
+        switch state {
+        case .unknown:
+            if arm <= armClosed && leg <= legClosed {
+                state = .closed
+            } else if arm >= armOpen && leg >= legOpen {
+                state = .open   // started mid-jack; the first close won't count
+            }
+        case .closed:
+            if arm >= armOpen && leg >= legOpen {
+                state = .open
+                cycleStart = frame.timestamp
+            }
+        case .open:
+            if arm <= armClosed && leg <= legClosed {
+                state = .closed
+                if let start = cycleStart, frame.timestamp - start >= minCycleDuration {
+                    count += 1
+                    didAdvance = true
+                }
+                cycleStart = nil
+            }
+        }
+        return AnalyzerResult(progress: Double(count), didAdvance: didAdvance, poseVisible: visible, formCue: nil)
+    }
+
+    /// Arm-raise angle (hip·shoulder·wrist, vertex at the shoulder), averaged
+    /// over whichever sides are fully detected. `nil` when neither side is.
+    private func armAngle(_ frame: PoseFrame) -> Double? {
+        let sides: [(Joint, Joint, Joint)] = [
+            (.leftHip, .leftShoulder, .leftWrist),
+            (.rightHip, .rightShoulder, .rightWrist),
+        ]
+        let angles = sides.compactMap { side -> Double? in
+            guard let a = frame.point(side.0, minConfidence: minConfidence),
+                  let b = frame.point(side.1, minConfidence: minConfidence),
+                  let c = frame.point(side.2, minConfidence: minConfidence) else { return nil }
+            return Geometry.angle(a, b, c)
+        }
+        guard !angles.isEmpty else { return nil }
+        return angles.reduce(0, +) / Double(angles.count)
+    }
+
+    /// Leg-spread angle at the root between the two ankles. `nil` when any of
+    /// the three joints is undetected — spread cannot be judged one-legged.
+    private func legAngle(_ frame: PoseFrame) -> Double? {
+        guard let root = frame.point(.root, minConfidence: minConfidence),
+              let left = frame.point(.leftAnkle, minConfidence: minConfidence),
+              let right = frame.point(.rightAnkle, minConfidence: minConfidence) else { return nil }
+        return Geometry.angle(left, root, right)
+    }
+
+    public mutating func reset() {
+        armSmoother = MovingAverage(windowSize: smoothingWindow)
+        legSmoother = MovingAverage(windowSize: smoothingWindow)
+        lastArm = nil
+        lastLeg = nil
+        state = .unknown
+        cycleStart = nil
+        count = 0
+    }
+}
+
 /// Maps an exercise id to a fresh analyzer, and lists all selectable exercises.
 public enum ExerciseRegistry {
     public static let all: [ExerciseDefinition] = [

@@ -390,6 +390,98 @@ struct ExerciseAnalyzerTests {
         #expect(a.progress == 0)
     }
 
+    /// Front-facing jack frame. The arm signal (hip·shoulder·wrist, vertex at the
+    /// shoulder) and leg signal (leftAnkle·root·rightAnkle, vertex at root) are
+    /// built from disjoint joint clusters so each angle can be set independently.
+    private func jackFrame(arm: Double, leg: Double, t: TimeInterval,
+                           confidence: Double = 0.9) -> PoseFrame {
+        let armRad = arm * .pi / 180, legRad = leg * .pi / 180
+        let shoulder = Point2D(x: 0, y: 0)
+        let hip = Point2D(x: cos(armRad), y: sin(armRad))
+        let wrist = Point2D(x: 1, y: 0)
+        let root = Point2D(x: 5, y: 5)
+        let leftAnkle = Point2D(x: 5 + cos(legRad), y: 5 + sin(legRad))
+        let rightAnkle = Point2D(x: 6, y: 5)
+        func jp(_ p: Point2D) -> JointPoint { JointPoint(location: p, confidence: confidence) }
+        return PoseFrame(timestamp: t, joints: [
+            .leftShoulder: jp(shoulder), .rightShoulder: jp(shoulder),
+            .leftHip: jp(hip), .rightHip: jp(hip),
+            .leftWrist: jp(wrist), .rightWrist: jp(wrist),
+            .root: jp(root),
+            .leftAnkle: jp(leftAnkle), .rightAnkle: jp(rightAnkle),
+        ])
+    }
+
+    /// One full jack cycle (closed → open → closed) at the given frame spacing.
+    private func jackCycle(start: TimeInterval, dt: TimeInterval) -> [PoseFrame] {
+        var frames: [PoseFrame] = []
+        var t = start
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));   t += dt }
+        for _ in 0..<8 { frames.append(jackFrame(arm: 175, leg: 50, t: t)); t += dt }
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));   t += dt }
+        return frames
+    }
+
+    @Test("JumpingJackAnalyzer counts a full synchronized cycle")
+    func jackCounts() {
+        var a = JumpingJackAnalyzer()
+        var last: AnalyzerResult?
+        for f in jackCycle(start: 0, dt: 0.1) { last = a.process(f) }
+        #expect(a.progress == 1)
+        #expect(last?.poseVisible == true)
+    }
+
+    @Test("JumpingJackAnalyzer ignores arm-only half-jacks (legs never spread)")
+    func jackIgnoresArmsOnly() {
+        var a = JumpingJackAnalyzer()
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));  t += 0.1 }
+        for _ in 0..<8 { frames.append(jackFrame(arm: 175, leg: 8, t: t)); t += 0.1 } // arms up, legs together
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));  t += 0.1 }
+        for f in frames { _ = a.process(f) }
+        #expect(a.progress == 0)
+    }
+
+    @Test("JumpingJackAnalyzer ignores leg-only cycles (arms never raise)")
+    func jackIgnoresLegsOnly() {
+        var a = JumpingJackAnalyzer()
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));  t += 0.1 }
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 50, t: t)); t += 0.1 } // legs out, arms down
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));  t += 0.1 }
+        for f in frames { _ = a.process(f) }
+        #expect(a.progress == 0)
+    }
+
+    @Test("JumpingJackAnalyzer holds state through a mid-cycle dropout")
+    func jackSurvivesDropout() {
+        var a = JumpingJackAnalyzer()
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));   t += 0.1 }
+        for _ in 0..<4 { frames.append(jackFrame(arm: 175, leg: 50, t: t)); t += 0.1 }
+        for _ in 0..<3 { frames.append(jackFrame(arm: 175, leg: 50, t: t, confidence: 0.1)); t += 0.1 } // pose lost
+        for _ in 0..<4 { frames.append(jackFrame(arm: 175, leg: 50, t: t)); t += 0.1 }
+        for _ in 0..<8 { frames.append(jackFrame(arm: 15, leg: 8, t: t));   t += 0.1 }
+        var sawInvisible = false
+        for f in frames {
+            let r = a.process(f)
+            if !r.poseVisible { sawInvisible = true }
+        }
+        #expect(a.progress == 1)     // dropout did not reset the cycle
+        #expect(sawInvisible)        // and the lost frames reported pose-not-visible
+    }
+
+    @Test("JumpingJackAnalyzer rejects a bounce faster than the minimum cycle")
+    func jackRejectsBounce() {
+        var a = JumpingJackAnalyzer()
+        // Same shape as a real cycle but compressed to ~0.16s, under the 0.35s floor.
+        for f in jackCycle(start: 0, dt: 0.02) { _ = a.process(f) }
+        #expect(a.progress == 0)
+    }
+
     @Test("registry returns fresh analyzers for known ids and nil otherwise")
     func registry() {
         #expect(ExerciseRegistry.makeAnalyzer(for: "pushup")?.definition.goalUnit == .reps)
