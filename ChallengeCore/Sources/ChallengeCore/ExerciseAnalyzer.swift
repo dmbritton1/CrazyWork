@@ -389,6 +389,43 @@ public struct GluteBridgeAnalyzer: ExerciseAnalyzer {
     public mutating func reset() { counter = RepCounter(config: config) }
 }
 
+/// Mountain climbers: hip-flexion angle (shoulder·hip·knee), `.minimum`
+/// combination so the driven knee owns the signal — each knee drive is one
+/// down→up cycle, so alternating legs counts 1 per drive. `minAsymmetry`
+/// rejects a symmetric both-knee tuck. No plank-orientation gate: the user
+/// selected the exercise. Form coaching deferred.
+public struct MountainClimberAnalyzer: ExerciseAnalyzer {
+    public let definition = ExerciseDefinition(id: "mountainclimber", displayName: "Mountain Climber", goalUnit: .reps, met: 8.0)
+    private let config: RepCounterConfig
+    private var counter: RepCounter
+
+    public var progress: Double { Double(counter.count) }
+
+    public init(minConfidence: Double = 0.5) {
+        self.config = RepCounterConfig(
+            upThreshold: 150, downThreshold: 110,
+            // Climber cadence is the fastest in the app; this is the tuning knob.
+            minRepDuration: 0.3,
+            minRangeOfMotion: 35,
+            minConfidence: minConfidence,
+            repJoints: [
+                JointTriple(.leftShoulder, .leftHip, .leftKnee),
+                JointTriple(.rightShoulder, .rightHip, .rightKnee),
+            ],
+            combination: .minimum,
+            minAsymmetry: 30)
+        self.counter = RepCounter(config: config)
+    }
+
+    public mutating func process(_ frame: PoseFrame) -> AnalyzerResult {
+        let update = counter.process(frame)
+        return AnalyzerResult(progress: Double(update.count), didAdvance: update.didCompleteRep,
+                              poseVisible: update.poseVisible, formCue: nil)
+    }
+
+    public mutating func reset() { counter = RepCounter(config: config) }
+}
+
 /// Maps an exercise id to a fresh analyzer, and lists all selectable exercises.
 public enum ExerciseRegistry {
     public static let all: [ExerciseDefinition] = [

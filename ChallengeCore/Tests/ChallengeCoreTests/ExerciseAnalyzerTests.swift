@@ -43,6 +43,22 @@ struct ExerciseAnalyzerTests {
         ])
     }
 
+    /// Torsos with independent hip-flexion angles (for mountain climber).
+    private func hipFrame(leftHip: Double, rightHip: Double, t: TimeInterval,
+                          confidence: Double = 0.9) -> PoseFrame {
+        func side(_ deg: Double) -> (Point2D, Point2D, Point2D) {
+            let rad = deg * .pi / 180
+            return (Point2D(x: cos(rad), y: sin(rad)), Point2D(x: 0, y: 0), Point2D(x: 1, y: 0))
+        }
+        let (ls, lh, lk) = side(leftHip)
+        let (rs, rh, rk) = side(rightHip)
+        func jp(_ p: Point2D) -> JointPoint { JointPoint(location: p, confidence: confidence) }
+        return PoseFrame(timestamp: t, joints: [
+            .leftShoulder: jp(ls), .leftHip: jp(lh), .leftKnee: jp(lk),
+            .rightShoulder: jp(rs), .rightHip: jp(rh), .rightKnee: jp(rk),
+        ])
+    }
+
     /// Side-view plank frame: body horizontal along x, propped on the arms
     /// (elbow/wrist below the shoulder); hip height controls sag/pike.
     private func plankFrame(hipY: Double, t: TimeInterval, confidence: Double = 0.9) -> PoseFrame {
@@ -168,6 +184,44 @@ struct ExerciseAnalyzerTests {
         for _ in 0..<8 { frames.append(legFrame(leftKnee: 175, rightKnee: 175, t: t)); t += 0.1 }
         for _ in 0..<8 { frames.append(legFrame(leftKnee: 25, rightKnee: 25, t: t));   t += 0.1 }
         for _ in 0..<8 { frames.append(legFrame(leftKnee: 175, rightKnee: 175, t: t)); t += 0.1 }
+        for f in frames { _ = a.process(f) }
+        #expect(a.progress == 0)
+    }
+
+    @Test("MountainClimberAnalyzer counts each knee drive as one rep")
+    func mountainClimberCountsEachDrive() {
+        var a = MountainClimberAnalyzer()
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 175, t: t)); t += 0.1 } // plank
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 90, rightHip: 175, t: t));  t += 0.1 } // left drive
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 175, t: t)); t += 0.1 } // back
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 90, t: t));  t += 0.1 } // right drive
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 175, t: t)); t += 0.1 } // back
+        for f in frames { _ = a.process(f) }
+        #expect(a.progress == 2)
+    }
+
+    @Test("MountainClimberAnalyzer ignores a symmetric both-knee tuck")
+    func mountainClimberIgnoresSymmetricTuck() {
+        var a = MountainClimberAnalyzer()
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 175, t: t)); t += 0.1 }
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 90, rightHip: 90, t: t));   t += 0.1 } // both tuck
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 175, t: t)); t += 0.1 }
+        for f in frames { _ = a.process(f) }
+        #expect(a.progress == 0)
+    }
+
+    @Test("MountainClimberAnalyzer ignores a shallow drive that never tucks")
+    func mountainClimberIgnoresShallow() {
+        var a = MountainClimberAnalyzer()
+        var frames: [PoseFrame] = []
+        var t = 0.0
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 175, t: t)); t += 0.1 }
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 120, rightHip: 175, t: t)); t += 0.1 } // above the 110 tuck line
+        for _ in 0..<8 { frames.append(hipFrame(leftHip: 175, rightHip: 175, t: t)); t += 0.1 }
         for f in frames { _ = a.process(f) }
         #expect(a.progress == 0)
     }
