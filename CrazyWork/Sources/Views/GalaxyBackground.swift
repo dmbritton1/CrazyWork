@@ -58,6 +58,44 @@ struct GalaxyBackground: View {
                             ctx.fill(Path(ellipseIn: rect), with: .color(color.opacity(alpha)))
                         }
                     }
+                    // Shooting stars: five hash-scheduled slots. Three are
+                    // always eligible; two more unlock while a fling keeps
+                    // `energy` high, so hard scrolls can spark extras. A
+                    // meteor is a chain of dots (never a stroked line), and
+                    // everything derives from (slot, firing) hashes — no state.
+                    if !paused {
+                        for slot in 0..<5 {
+                            guard slot < 3 || energy > 0.3 else { continue }
+                            let period = 14 + rand(9, slot, 0) * 12         // 14…26 s
+                            guard let life = Self.meteorPhase(t: t, period: period, duration: 0.6)
+                            else { continue }
+                            let firing = Int((t / period).rounded(.down))   // reseed each firing
+                            let sx = rand(9 + slot, firing, 0) * size.width
+                            let sy = rand(9 + slot, firing, 1) * size.height * 0.66
+                            let dirX = rand(9 + slot, firing, 2) < 0.5 ? -0.8 : 0.8
+                            let mag = hypot(dirX, 0.55)
+                            let ux = dirX / mag, uy = 0.55 / mag
+                            let travel = 180 + rand(9 + slot, firing, 3) * 80   // 180…260 pt
+                            let head = CGPoint(x: sx + ux * travel * life,
+                                               y: sy + uy * travel * life)
+                            let color: Color = rand(9 + slot, firing, 4) < 0.2
+                                             ? Palette.accentRedBright : Palette.ink
+                            // Fade in and out over the life; flings brighten.
+                            let envelope = sin(.pi * life) * (0.7 + 0.6 * Double(energy))
+                            for seg in 0..<8 {
+                                let f = Double(seg) / 7
+                                let p = CGPoint(x: head.x - ux * 30 * f, y: head.y - uy * 30 * f)
+                                let r = 2.2 - 1.8 * f
+                                let alpha = envelope * (1 - f * 0.85)
+                                let rect = CGRect(x: p.x - r / 2, y: p.y - r / 2, width: r, height: r)
+                                if seg == 0 {   // halo on the head, like the biggest stars
+                                    ctx.fill(Path(ellipseIn: rect.insetBy(dx: -r, dy: -r)),
+                                             with: .color(color.opacity(alpha * 0.15)))
+                                }
+                                ctx.fill(Path(ellipseIn: rect), with: .color(color.opacity(alpha)))
+                            }
+                        }
+                    }
                 }
             }
         }
