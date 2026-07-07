@@ -8,6 +8,8 @@ struct PathView: View {
     @AppStorage("pathIndex") private var pathIndex = 0
     @AppStorage("pathLastCompletedDay") private var pathLastCompletedDay = Int.min
     @State private var scrollY: CGFloat = 0
+    @State private var stretch: CGFloat = 0        // scroll-velocity lag on the ribbon, springs back to 0
+    @State private var stretchReset: Task<Void, Never>?
     @State private var selectedNode: NodeSelection?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
@@ -23,6 +25,16 @@ struct PathView: View {
     private let rowHeight: CGFloat = 188   // generous vertical spread between nodes
     private let nodeSize: CGFloat = 64
     private let topExtra: CGFloat = 150    // headroom for the ribbon to rise past the first node and fade out
+    /// The central strand's flutter on top of the spine — low frequency, so
+    /// the line bends at the workouts, not between them. Shared by the
+    /// drawing, the perch math, and the detours so figures always sit on the
+    /// drawn line.
+    private static let wiggleAmp = 0.035
+    private static let wiggleFreq = 0.028
+    /// Clear air kept around each figure: grey echo strands are masked out
+    /// inside this radius so only the central strand (which detours) comes
+    /// near a figure.
+    private let breathR: CGFloat = 48
 
     private var today: Int { PathProgram.epochDay(Date()) }
     private var progress: PathProgress {
@@ -46,6 +58,10 @@ struct PathView: View {
     var body: some View {
         ZStack {
             Palette.canvas.ignoresSafeArea()
+            GalaxyBackground(drift: reduceMotion ? 0 : scrollY,
+                             energy: min(1, abs(stretch) * 1.5),
+                             paused: reduceMotion)
+                .ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     hero
@@ -54,15 +70,29 @@ struct PathView: View {
                 }
                 .padding(.bottom, Spacing.section)
             }
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { old, y in
                 scrollY = y
+                guard !reduceMotion else { return }
+                // Ribbon inertia: follow scroll velocity while moving, then
+                // spring back once events stop for a beat.
+                let target = max(-1, min(1, (y - old) / 60))
+                stretch = stretch * 0.6 + target * 0.4
+                stretchReset?.cancel()
+                stretchReset = Task {
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.55)) { stretch = 0 }
+                }
             }
+            streakPill
         }
         .toolbar(.hidden, for: .navigationBar)
     }
 
     private var hero: some View {
-        HeroStripeBand {
+        // Eases down slightly as it scrolls away, handing off to the pill.
+        let p = reduceMotion ? 0 : min(1, max(0, (scrollY - 20) / 130))
+        return HeroStripeBand {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "flame.fill").foregroundStyle(Palette.brandRed)
@@ -75,6 +105,33 @@ struct PathView: View {
                     .typography(Typography.bodyMd).foregroundStyle(Palette.mute)
             }
         }
+        .scaleEffect(1 - 0.05 * p, anchor: .top)
+    }
+
+    /// Compact sticky stand-in for the hero once it scrolls off: flame, streak,
+    /// and today's state in one capsule.
+    private var streakPill: some View {
+        VStack {
+            if scrollY > 130 {
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 13)).foregroundStyle(Palette.brandRed)
+                    Text("\(streak) day\(streak == 1 ? "" : "s")")
+                        .typography(Typography.bodySmStrong).foregroundStyle(Palette.ink)
+                    Text("·").foregroundStyle(Palette.stone)
+                    Text(doneToday ? "Done today" : todayDay.focus)
+                        .typography(Typography.captionMd).foregroundStyle(Palette.mute)
+                }
+                .padding(.horizontal, Spacing.md).padding(.vertical, Spacing.xs)
+                .background(Capsule().fill(Palette.surfaceElevated.opacity(0.94)))
+                .overlay(Capsule().stroke(Palette.hairline, lineWidth: 1))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            Spacer()
+        }
+        .padding(.top, Spacing.xs)
+        .animation(Motion.resolved(Motion.state, reduceMotion: reduceMotion), value: scrollY > 130)
+        .allowsHitTesting(false)
     }
 
     private var supplementarySection: some View {
@@ -106,32 +163,92 @@ struct PathView: View {
     private var trail: some View {
         GeometryReader { geo in
             let cx = geo.size.width / 2
-            let amp = min(cx - 24, 172)      // shared with the ribbon
+            let amp = min(cx - 24, 172)      // wiggle/detour scale
             let maxOff = cx - 66             // keep dots + labels on screen
             let height = rowHeight * CGFloat(windowIndices.count) + topExtra
-            let points = windowIndices.indices.map { local -> CGPoint in
+            // Nodes first, ribbon second: each workout picks its own spot —
+            // alternating sides with a hashed reach and vertical jitter — and
+            // the strand is drawn THROUGH those spots, so the line visibly
+            // exists to connect the workouts. Hashes key off the absolute
+            // index, so a node keeps its spot as the window advances.
+            let anchors = windowIndices.indices.map { local -> CGPoint in
+                let i = windowIndices[local]
+                let side: CGFloat = i.isMultiple(of: 2) ? -1 : 1
+                let x = cx + side * maxOff * (0.6 + 0.4 * Self.nodeRand(i, 0))
                 let y = topExtra + rowHeight / 2 + CGFloat(local) * rowHeight
-                let x = cx + ribbonWave(y) * amp + insideOffset(y)  // tuck into the curve
-                return CGPoint(x: min(cx + maxOff, max(cx - maxOff, x)), y: y)
+                      + (Self.nodeRand(i, 1) - 0.5) * rowHeight * 0.42
+                return CGPoint(x: x, y: y)
+            }
+            let spine = TrailSpine(anchors: anchors, cx: cx, overrun: rowHeight)
+            let points = anchors.indices.map { local -> CGPoint in
+                // Snap to a perch on the UPPER side of the strand, 11pt out —
+                // that puts the glyph's internal ground line (≈0.8 of the
+                // icon) right on the strand, so the figure sits on it.
+                let f = strandFrame(near: anchors[local], spine: spine, amp: amp)
+                let up = f.o.dy <= 0 ? f.o : CGVector(dx: -f.o.dx, dy: -f.o.dy)
+                let snapped = CGPoint(x: f.best.x + up.dx * 11, y: f.best.y + up.dy * 11)
+                return CGPoint(x: min(cx + maxOff, max(cx - maxOff, snapped.x)), y: snapped.y)
+            }
+            // Trail-local y of the viewport's vertical center, for the ink edge.
+            let viewportH = geo.bounds(of: .scrollView)?.height ?? 0
+            let inkY = viewportH / 2 - geo.frame(in: .scrollView).minY
+            // For each figure: where along the strand it perches, how far the
+            // enclosing strand must bow out perpendicular to the line, and
+            // which side of the line the figure stands on. The detour arcs
+            // over the figure; the core line stays tight under its feet.
+            let detours = windowIndices.indices.map { local -> (y: CGFloat, bulge: CGFloat, side: CGFloat) in
+                let f = strandFrame(near: points[local], spine: spine, amp: amp)
+                let isToday = progress.state(of: windowIndices[local], today: today) == .today
+                // Figure side: sign of the perch normal against the line's
+                // continuous left normal (-u.dy, u.dx).
+                let side: CGFloat = (f.o.dx * -f.u.dy + f.o.dy * f.u.dx) >= 0 ? 1 : -1
+                return (y: f.best.y, bulge: isToday ? 48 : 44, side: side)
             }
             ZStack(alignment: .topLeading) {
-                flowLine(height: height, cx: cx, amp: amp,
-                         drift: reduceMotion ? 0 : scrollY)
+                ZStack(alignment: .topLeading) {
+                    flowLine(width: geo.size.width, height: height, spine: spine, amp: amp,
+                             drift: reduceMotion ? 0 : scrollY,
+                             inkY: reduceMotion ? 0 : inkY,
+                             holes: points, detours: detours)
+                }
+                // Inertia from scroll velocity: the ribbon lags a touch and
+                // its amplitude tenses, then springs back. Nodes stay put.
+                .offset(y: stretch * -14)
+                .scaleEffect(x: 1 - abs(stretch) * 0.04)
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
-                    nodeView(nodeIndex)
-                        // Depth-of-field: the node nearest the viewport center
-                        // is crisp and full-size; nodes recede toward the edges.
+                    // Figure sits on the line: tilt it to the strand's slope
+                    // under the perch. The tangent always points down-page,
+                    // so fold its angle into (-90°, 90°] — the figure leans
+                    // with the line but is never upside down.
+                    let f = strandFrame(near: points[local], spine: spine, amp: amp)
+                    let slope = atan2(Double(f.u.dy), Double(f.u.dx))
+                    nodeView(nodeIndex,
+                             groundAngle: .radians(slope > .pi / 2 ? slope - .pi : slope))
+                        // Gentle magnify: every node stays crisp and opaque;
+                        // the one nearest the viewport center grows ~9%.
                         .visualEffect { [reduceMotion] content, proxy in
-                            let t = reduceMotion ? 0 : Self.focusT(
+                            let t = Self.focusT(
                                 midY: proxy.frame(in: .scrollView).midY,
                                 viewportHeight: proxy.bounds(of: .scrollView)?.height ?? 0)
-                            return content
-                                .scaleEffect(1 - 0.16 * t)
-                                .opacity(1 - 0.5 * t)
-                                .blur(radius: 2.5 * t)
+                            let f = reduceMotion ? 0 : (1 - t) * (1 - t) * (1 - t)
+                            return content.scaleEffect(1 + 0.09 * f)
                         }
                         .position(points[local])
                 }
+                // The fastest-drifting echo rides ABOVE the trail: it slides
+                // over the detours and ink so the parallax reads in both
+                // directions, but the mask keeps it out of every figure's
+                // pocket of air.
+                ribbonPath(height: height, spine: spine, amp: amp,
+                           wiggleAmp: Self.wiggleAmp, wiggleFreq: Self.wiggleFreq)
+                    .stroke(Palette.trailStrand,
+                            style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                    .offset(x: -50, y: (reduceMotion ? 0 : scrollY) * -0.08)
+                    .opacity(0.30)
+                    .offset(y: stretch * -14)
+                    .scaleEffect(x: 1 - abs(stretch) * 0.04)
+                    .mask(breathingRoom(width: geo.size.width, height: height, holes: points))
+                    .allowsHitTesting(false)
             }
         }
         .frame(height: rowHeight * CGFloat(windowIndices.count) + topExtra)
@@ -148,37 +265,88 @@ struct PathView: View {
         .padding(.top, Spacing.md - topExtra)   // pull the headroom up over the hero gap; nodes stay put
     }
 
-    /// An abstract red ribbon that meanders on its own — wider amplitude and a
-    /// different rhythm than the dots, so it weaves around them rather than
-    /// connecting them — with two fainter offset echoes for depth.
-    private func flowLine(height: CGFloat, cx: CGFloat, amp: CGFloat, drift: CGFloat) -> some View {
-        // Several grey strands sharing the spine but each with its own phase and
-        // high-frequency wiggle, so the band reads as a complex woven line.
-        let main = ribbonPath(height: height, cx: cx, amp: amp, wiggleAmp: 0.06, wiggleFreq: 0.061)
-        let a = ribbonPath(height: height, cx: cx, amp: amp, phase: 1.3, wiggleAmp: 0.11, wiggleFreq: 0.049)
-        let b = ribbonPath(height: height, cx: cx, amp: amp, phase: 3.7, wiggleAmp: 0.15, wiggleFreq: 0.034)
+    /// The ribbon threads THROUGH the workouts: its spine is a spline over the
+    /// node anchors, dressed with two fainter offset echoes for depth.
+    private func flowLine(width: CGFloat, height: CGFloat, spine: TrailSpine, amp: CGFloat,
+                          drift: CGFloat, inkY: CGFloat, holes: [CGPoint],
+                          detours: [(y: CGFloat, bulge: CGFloat, side: CGFloat)]) -> some View {
+        // Several grey strands sharing the spine, each with its own phase and
+        // a slow flutter — languid enough that the band bends back and forth
+        // without micro-squiggle between the workouts.
+        let main = ribbonPath(height: height, spine: spine, amp: amp,
+                              wiggleAmp: Self.wiggleAmp, wiggleFreq: Self.wiggleFreq)
+        let a = ribbonPath(height: height, spine: spine, amp: amp, phase: 1.3, wiggleAmp: 0.07, wiggleFreq: 0.020)
+        let b = ribbonPath(height: height, spine: spine, amp: amp, phase: 3.7, wiggleAmp: 0.09, wiggleFreq: 0.014)
+        // One detour per figure: peels off the central strand upstream, bows
+        // out perpendicular to the line over the figure's side, and converges
+        // back downstream — the core line stays tight under the feet, so the
+        // two close the pocket. All detours share one path, one stroke.
+        var arc = Path()
+        for d in detours { arc.addPath(detourPath(nodeY: d.y, bulge: d.bulge, side: d.side, spine: spine, amp: amp)) }
         let stroke = { (w: CGFloat) in StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round) }
         // Parallax: each echo drifts vertically at its own small rate as you
         // scroll, so the woven band separates into near/far layers. The
         // central strand stays locked to the nodes. Strands overrun both
         // edges by rowHeight in ribbonPath, which covers the largest drift.
         return ZStack {
-            main.stroke(Palette.hairlineStrong, style: stroke(1.4))
-                .offset(x: 46, y: drift * 0.06).opacity(0.30)
-            main.stroke(Palette.hairlineStrong, style: stroke(1.4))
-                .offset(x: -50, y: drift * -0.08).opacity(0.26)
-            a.stroke(Palette.hairlineStrong, style: stroke(1.3))
-                .offset(x: 22, y: drift * 0.03).opacity(0.40)
-            b.stroke(Palette.hairlineStrong, style: stroke(1.3))
-                .offset(x: -24, y: drift * -0.04).opacity(0.40)
-            main.stroke(Palette.mute.opacity(0.45), style: stroke(2))   // central strand, grey
+            // Grey echoes never run through a figure: the mask (applied after
+            // the drift offsets, so the holes stay pinned to the figures)
+            // clears a pocket of air around each one.
+            ZStack {
+                main.stroke(Palette.trailStrand, style: stroke(1.4))
+                    .offset(x: 46, y: drift * 0.06).opacity(0.42)
+                a.stroke(Palette.trailStrand, style: stroke(1.3))
+                    .offset(x: 22, y: drift * 0.03).opacity(0.55)
+                b.stroke(Palette.trailStrand, style: stroke(1.3))
+                    .offset(x: -24, y: drift * -0.04).opacity(0.55)
+            }
+            .mask(breathingRoom(width: width, height: height, holes: holes))
+            // Enclosure arc: shares the spine, so between figures it lies on
+            // the central strand as one line and only peels off around figures.
+            arc.stroke(Palette.trailStrandMain.opacity(0.65), style: stroke(1.8))
+            main.stroke(Palette.trailStrandMain.opacity(0.6), style: stroke(2))   // central strand
+            // Trail ink: the stretch above the viewport center reads as
+            // already traveled — the central strand tints brand red behind
+            // you, dissolving back to grey over ~180pt around the center.
+            ZStack {
+                main.stroke(Palette.brandRed.opacity(0.22), style: stroke(7)).blur(radius: 5)
+                main.stroke(Palette.brandRed.opacity(0.75), style: stroke(2.4))
+            }
+            .mask(inkMask(inkY: inkY, height: height))
         }
     }
 
-    /// A free-flowing curve sampled down the full height from `ribbonWave`, with
-    /// an optional phase-shifted high-frequency wiggle, extended past the
-    /// top/bottom so each strand runs off both edges.
-    private func ribbonPath(height: CGFloat, cx: CGFloat, amp: CGFloat,
+    /// Mask that is everything EXCEPT a clear circle around each figure —
+    /// even-odd fill punches the holes, and the blur feathers their edges so
+    /// strands dissolve toward a figure instead of snapping off. The rect
+    /// overruns all edges so the strands' offscreen extensions aren't clipped.
+    private func breathingRoom(width: CGFloat, height: CGFloat, holes: [CGPoint]) -> some View {
+        var p = Path()
+        p.addRect(CGRect(x: -120, y: -rowHeight * 2,
+                         width: width + 240, height: height + rowHeight * 4))
+        for c in holes {
+            p.addEllipse(in: CGRect(x: c.x - breathR, y: c.y - breathR,
+                                    width: breathR * 2, height: breathR * 2))
+        }
+        return p.fill(style: FillStyle(eoFill: true)).blur(radius: 14)
+    }
+
+    /// Mask that is solid from the trail's top down to just above `inkY`, then
+    /// fades out — so the red ink trails off around the viewport center.
+    private func inkMask(inkY: CGFloat, height: CGFloat) -> some View {
+        let s0 = min(1, max(0, (inkY - 90) / height))
+        let s1 = min(1, max(s0 + 0.0001, (inkY + 90) / height))
+        return Rectangle().fill(LinearGradient(
+            stops: [.init(color: .black, location: 0),
+                    .init(color: .black, location: s0),
+                    .init(color: .clear, location: s1)],
+            startPoint: .top, endPoint: .bottom))
+    }
+
+    /// The spine curve sampled down the full height, with an optional
+    /// phase-shifted high-frequency wiggle, extended past the top/bottom so
+    /// each strand runs off both edges.
+    private func ribbonPath(height: CGFloat, spine: TrailSpine, amp: CGFloat,
                             phase: Double = 0, wiggleAmp: Double = 0,
                             wiggleFreq: Double = 0) -> Path {
         Path { p in
@@ -186,55 +354,141 @@ struct PathView: View {
             var first = true
             while y <= height + rowHeight {
                 let extra = wiggleAmp == 0 ? 0 : wiggleAmp * sin(Double(y) * wiggleFreq + phase)
-                let xv = Double(ribbonWave(y)) + extra
-                let pt = CGPoint(x: cx + CGFloat(xv) * amp, y: y)
+                let x = spine.x(y) + CGFloat(extra) * amp
+                let pt = CGPoint(x: x, y: y)
                 if first { p.move(to: pt); first = false } else { p.addLine(to: pt) }
-                y += 12
+                y += 6
             }
         }
     }
 
-    /// The ribbon's own meander as a function of vertical position (not node
-    /// index), so it is decoupled from where the dots sit.
-    private func ribbonWave(_ y: CGFloat) -> CGFloat {
-        let v = sin(Double(y) * 0.011 + 0.6) * 0.62 + sin(Double(y) * 0.027 + 2.3) * 0.52
-        return CGFloat(max(-1.15, min(1.15, v)))
+    /// The strand's detour around one figure: a two-segment Bézier swerve
+    /// that leaves the central strand tangentially upstream of the perch,
+    /// passes the figure at `bulge` points of perpendicular clearance moving
+    /// parallel to the ground under it, and rejoins the strand tangentially
+    /// downstream. Built from anchors + tangents (not by offsetting the
+    /// curve), so it can never cusp where the strand bends tighter than the
+    /// clearance.
+    private func detourPath(nodeY: CGFloat, bulge: CGFloat, side: CGFloat,
+                            spine: TrailSpine, amp: CGFloat) -> Path {
+        func sx(_ y: CGFloat) -> CGFloat {   // central strand incl. its wiggle
+            spine.x(y) + CGFloat(Self.wiggleAmp * sin(Double(y) * Self.wiggleFreq)) * amp
+        }
+        func tangent(_ y: CGFloat) -> CGVector {
+            let dx = sx(y + 3) - sx(y - 3)
+            let l = hypot(dx, 6)
+            return CGVector(dx: dx / l, dy: 6 / l)
+        }
+        // Long reach: the clearance ramps up over ~2.8× the bulge, so the
+        // detour's normal offset never fights the fast-turning strand at an
+        // apex (short ramps read as an S-wobble on the inside of a bend).
+        let reach = bulge * 2.8
+        // Anchors riding the strand, each pushed out along the LOCAL normal
+        // by a cosine falloff (full clearance at the figure, zero at the
+        // ends) — so the detour bends everywhere the core line bends instead
+        // of chording across it. Still anchors + tangents, never a raw curve
+        // offset, so it can't cusp at a tight apex.
+        let raw = stride(from: -1.0, through: 1.0, by: 1.0 / 3).map { s -> CGPoint in
+            let y = nodeY + CGFloat(s) * reach
+            let u = tangent(y)
+            let w = CGFloat(0.5 * (1 + cos(s * .pi)))
+            let n = CGVector(dx: -u.dy * side, dy: u.dx * side)   // toward the figure
+            return CGPoint(x: sx(y) + n.dx * bulge * w, y: y + n.dy * bulge * w)
+        }
+        // One 1-2-1 low-pass over the interior: where the strand turns fast,
+        // adjacent normals disagree and the raw anchors zigzag a touch — the
+        // blur trades a hair of clearance for a jog-free line.
+        let stops = raw.indices.map { i -> CGPoint in
+            guard i > 0, i < raw.count - 1 else { return raw[i] }
+            return CGPoint(x: (raw[i - 1].x + 2 * raw[i].x + raw[i + 1].x) / 4,
+                           y: (raw[i - 1].y + 2 * raw[i].y + raw[i + 1].y) / 4)
+        }
+        // Tangents come from the detour's own shape (Catmull-Rom), not the
+        // strand's — where the clearance ramps, the two differ and strand
+        // tangents kink the joins. The ends keep the strand tangent so the
+        // detour still leaves and rejoins the line seamlessly.
+        let tangents = stops.indices.map { i -> CGVector in
+            if i == 0 { return tangent(nodeY - reach) }
+            if i == stops.count - 1 { return tangent(nodeY + reach) }
+            let d = CGVector(dx: stops[i + 1].x - stops[i - 1].x,
+                             dy: stops[i + 1].y - stops[i - 1].y)
+            let l = max(1, hypot(d.dx, d.dy))
+            return CGVector(dx: d.dx / l, dy: d.dy / l)
+        }
+        var p = Path()
+        p.move(to: stops[0])
+        for i in 0..<(stops.count - 1) {
+            let a = stops[i], b = stops[i + 1]
+            let k = hypot(b.x - a.x, b.y - a.y) / 3
+            p.addCurve(to: b,
+                       control1: CGPoint(x: a.x + tangents[i].dx * k, y: a.y + tangents[i].dy * k),
+                       control2: CGPoint(x: b.x - tangents[i + 1].dx * k, y: b.y - tangents[i + 1].dy * k))
+        }
+        return p
     }
 
-    /// Signed horizontal nudge (points) pushing a node toward the concave —
-    /// "inside" — side of the ribbon's curve at vertical position `y`, larger
-    /// where the ribbon bends harder so dots nestle into each bow.
-    private func insideOffset(_ y: CGFloat) -> CGFloat {
-        let d = Double(y), a = 0.011, b = 0.027
-        let curvature = -(a * a) * 0.62 * sin(a * d + 0.6)
-                      - (b * b) * 0.52 * sin(b * d + 2.3)   // ribbonWave''(y)
-        let sign: CGFloat = curvature >= 0 ? 1 : -1
-        let strength = min(1, CGFloat(abs(curvature)) * 2200)
-        return sign * (38 + 46 * strength)
+    /// Local frame of the central strand nearest a node: the closest strand
+    /// point, the unit tangent `u` along the line, and the unit normal `o`
+    /// toward the node.
+    private func strandFrame(near node: CGPoint, spine: TrailSpine, amp: CGFloat)
+        -> (best: CGPoint, u: CGVector, o: CGVector) {
+        func strandX(_ y: CGFloat) -> CGFloat {
+            spine.x(y) + CGFloat(Self.wiggleAmp * sin(Double(y) * Self.wiggleFreq)) * amp
+        }
+        var best = CGPoint(x: strandX(node.y - 140), y: node.y - 140)
+        var bestD = CGFloat.greatestFiniteMagnitude
+        var y = node.y - 140
+        while y <= node.y + 140 {
+            let pt = CGPoint(x: strandX(y), y: y)
+            let dd = hypot(pt.x - node.x, pt.y - node.y)
+            if dd < bestD { bestD = dd; best = pt }
+            y += 6
+        }
+        let dxT = strandX(best.y + 6) - strandX(best.y - 6)
+        let tl = hypot(dxT, 12)
+        let u = CGVector(dx: dxT / tl, dy: 12 / tl)
+        let o: CGVector = bestD < 8
+            ? CGVector(dx: -u.dy, dy: u.dx)
+            : CGVector(dx: (node.x - best.x) / bestD, dy: (node.y - best.y) / bestD)
+        return (best, u, o)
+    }
+
+    /// Deterministic per-node hash in [0, 1): stable across scrolls and
+    /// launches, so each workout keeps its spot on the trail.
+    private static func nodeRand(_ node: Int, _ channel: Int) -> CGFloat {
+        let n = sin(Double(node * 104729 + channel * 7919 + 17) * 12.9898) * 43758.5453
+        return CGFloat(n - n.rounded(.down))
     }
 
     /// Depth-of-field falloff: 0 when a node's midY sits at the viewport
     /// center, rising to 1 at the top/bottom edge (clamped beyond).
-    static func focusT(midY: CGFloat, viewportHeight: CGFloat) -> CGFloat {
+    nonisolated static func focusT(midY: CGFloat, viewportHeight: CGFloat) -> CGFloat {
         guard viewportHeight > 0 else { return 0 }
         let half = viewportHeight / 2
         return min(1, abs(midY - half) / half)
     }
 
     @ViewBuilder
-    private func nodeView(_ nodeIndex: Int) -> some View {
+    private func nodeView(_ nodeIndex: Int, groundAngle: Angle) -> some View {
         let state = progress.state(of: nodeIndex, today: today)
         let day = PathProgram.day(at: nodeIndex)
         Button {
             selectedNode = NodeSelection(id: nodeIndex, day: day, startable: state == .today)
         } label: {
-            VStack(spacing: Spacing.xs) {
-                nodeCircle(state: state, day: day)
-                Text(day.title).typography(Typography.captionMd)
-                    .foregroundStyle(state == .locked || state == .lockedNext ? Palette.ash : Palette.body)
-                    .lineLimit(1)
-            }
-            .frame(width: 132)
+            nodeCircle(state: state, day: day, groundAngle: groundAngle)
+                // Label hangs below as an overlay so position() centers the
+                // circle itself on the perch — a VStack would shift the
+                // figure half the label's height off the line.
+                .overlay(alignment: .bottom) {
+                    Text(day.title).typography(Typography.captionMd)
+                        .foregroundStyle(state == .locked || state == .lockedNext ? Palette.ash : Palette.body)
+                        .lineLimit(1)
+                        .padding(.horizontal, Spacing.xs).padding(.vertical, 2)
+                        // keeps the title legible where strands cross beneath it
+                        .background(Capsule().fill(Palette.canvas.opacity(0.72)))
+                        .fixedSize()
+                        .offset(y: 26)
+                }
         }
         .buttonStyle(PressableButtonStyle())
         .popover(item: Binding(             // anchored to THIS circle only
@@ -245,49 +499,186 @@ struct PathView: View {
         }
     }
 
-    @ViewBuilder
-    private func nodeCircle(state: NodeState, day: PathDay) -> some View {
-        switch state {
-        case .done:
-            circle(center: Palette.brandRed.opacity(0.5), edge: Palette.brandRed.opacity(0.05),
-                   border: Palette.brandRed.opacity(0.30), borderWidth: 1,
-                   symbol: "checkmark", symbolColor: Palette.brandRed.opacity(0.85))
-        case .today:
-            orb(center: Palette.brandRed.opacity(0.26), edge: .clear,
-                border: Palette.brandRed.opacity(0.45), borderWidth: 1.5)
-                .overlay(ExercisePoseIcon(exerciseID: day.entries.first?.exerciseID ?? "",
-                                          color: Palette.accentRed)
-                    .frame(width: nodeSize * 0.56, height: nodeSize * 0.56))
-                .scaleEffect(1.1)   // today reads a touch larger, still soft
-        case .lockedNext, .locked:
-            circle(center: Palette.surfaceCard.opacity(0.85), edge: .clear,
-                   border: Palette.hairline.opacity(0.45), borderWidth: 1,
-                   symbol: "lock.fill", symbolColor: Palette.mute.opacity(0.55))
+    /// Every node is a bare stick-figure pose glyph over a soft color wash —
+    /// no ring, no enclosure: the figure just stands on the strand, grounded
+    /// by the `perchMark` worn spot under its feet. State lives in a small
+    /// corner badge (check / lock).
+    private func nodeCircle(state: NodeState, day: PathDay, groundAngle: Angle) -> some View {
+        let locked = state == .locked || state == .lockedNext
+        let glyph: Color = locked ? Palette.ash : Palette.accentRed
+        let fill: Color = state == .today ? Palette.brandRed.opacity(0.26)
+                        : locked ? Palette.surfaceCard.opacity(0.85)
+                        : Palette.brandRed.opacity(0.10)
+        return ZStack {
+            ZStack {
+                orb(center: fill, edge: .clear)
+                ExercisePoseIcon(exerciseID: day.entries.first?.exerciseID ?? "", color: glyph)
+                    .frame(width: nodeSize * 0.56, height: nodeSize * 0.56)
+            }
+            // tilt to the strand's slope: the figure sits on the line at
+            // whatever angle it runs under the perch
+            .rotationEffect(groundAngle)
+            if state == .done { badge("checkmark") }
+            if locked { badge("lock.fill") }
         }
+        .frame(width: nodeSize, height: nodeSize)
+        .scaleEffect(state == .today ? 1.1 : 1)   // today reads a touch larger
+    }
+
+    private func badge(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Palette.mute)
+            .padding(4)
+            .background(Circle().fill(Palette.surfaceElevated))
+            .overlay(Circle().stroke(Palette.hairline, lineWidth: 1))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .offset(x: 4, y: -4)   // clear of the label below the circle
     }
 
     /// A soft orb whose fill fades from `center` to `edge` so nodes melt into
     /// the background rather than sitting as hard chips.
-    private func orb(center: Color, edge: Color, border: Color, borderWidth: CGFloat) -> some View {
+    private func orb(center: Color, edge: Color) -> some View {
         Circle()
             .fill(RadialGradient(colors: [center, edge], center: .center,
                                  startRadius: 1, endRadius: nodeSize / 2))
             .frame(width: nodeSize, height: nodeSize)
-            .overlay(Circle().stroke(border, lineWidth: borderWidth))
-    }
-
-    private func circle(center: Color, edge: Color, border: Color, borderWidth: CGFloat,
-                        symbol: String, symbolColor: Color) -> some View {
-        orb(center: center, edge: edge, border: border, borderWidth: borderWidth)
-            .overlay(Image(systemName: symbol)
-                .font(.system(size: nodeSize * 0.38, weight: .medium))
-                .foregroundStyle(symbolColor))
     }
 
     private func completeToday() {
         let next = progress.completing(today: today)
         pathIndex = next.index
         pathLastCompletedDay = next.lastCompletedDay
+    }
+}
+
+/// The trail's central strand, derived FROM the node anchors: a C1 cubic
+/// Hermite x(y) through them, so the line visibly exists to connect the
+/// workouts. Finite-difference tangents mean that when anchors alternate
+/// sides, the curve turns around AT each anchor — every figure perches at a
+/// bend's apex on near-level ground, like a marker at a switchback.
+struct TrailSpine {
+    private let ys: [CGFloat], xs: [CGFloat], ms: [CGFloat]   // ms = dx/dy at each knot
+
+    init(anchors: [CGPoint], cx: CGFloat, overrun: CGFloat) {
+        // Phantom knots continue the serpentine past both ends (opposite
+        // side, softened) so the strands run off screen instead of dying at
+        // the first or last workout.
+        var pts = anchors
+        if let f = anchors.first, let l = anchors.last {
+            pts.insert(CGPoint(x: cx - (f.x - cx) * 0.7, y: f.y - overrun * 1.2), at: 0)
+            pts.append(CGPoint(x: cx - (l.x - cx) * 0.7, y: l.y + overrun * 1.2))
+        }
+        ys = pts.map(\.y)
+        xs = pts.map(\.x)
+        ms = pts.indices.map { i in
+            let lo = max(0, i - 1), hi = min(pts.count - 1, i + 1)
+            return (pts[hi].x - pts[lo].x) / max(1, pts[hi].y - pts[lo].y)
+        }
+    }
+
+    /// Strand x at any y; linear along the end tangents beyond the knots.
+    func x(_ y: CGFloat) -> CGFloat {
+        guard let last = ys.indices.last else { return 0 }
+        if y <= ys[0] { return xs[0] + ms[0] * (y - ys[0]) }
+        if y >= ys[last] { return xs[last] + ms[last] * (y - ys[last]) }
+        var i = 0
+        while ys[i + 1] < y { i += 1 }
+        let h = ys[i + 1] - ys[i], t = (y - ys[i]) / h
+        let t2 = t * t, t3 = t2 * t
+        return (2 * t3 - 3 * t2 + 1) * xs[i] + (t3 - 2 * t2 + t) * h * ms[i]
+             + (3 * t2 - 2 * t3) * xs[i + 1] + (t3 - t2) * h * ms[i + 1]
+    }
+}
+
+/// A deep-space field behind the trail: three star layers at different
+/// parallax depths over two barely-there nebula washes. Stars twinkle gently
+/// when idle; `energy` (scroll velocity) raises both the number of twinkling
+/// stars and their luminosity, so flinging the page makes the sky flare.
+/// No linework — the trail ribbon stays the only line on the canvas.
+private struct GalaxyBackground: View {
+    var drift: CGFloat     // scroll offset, for parallax
+    var energy: CGFloat    // 0…1 scroll excitement
+    var paused: Bool       // Reduce Motion: static sky
+    @Environment(\.colorScheme) private var scheme
+    /// Ink-tone washes sit on white far louder than on near-black.
+    private var nebulaDim: Double { scheme == .dark ? 1 : 0.35 }
+
+    private struct Layer { let count: Int; let parallax: CGFloat
+                           let size: ClosedRange<CGFloat>; let alpha: CGFloat }
+    private let layers: [Layer] = [
+        Layer(count: 48, parallax: 0.10, size: 0.7...1.3, alpha: 0.20),   // far
+        Layer(count: 36, parallax: 0.24, size: 0.9...1.8, alpha: 0.32),   // mid
+        Layer(count: 24, parallax: 0.44, size: 1.3...2.4, alpha: 0.48),   // near
+    ]
+
+    var body: some View {
+        ZStack {
+            nebula
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: paused)) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                Canvas { ctx, size in
+                    let period = size.height + 120   // wrap zone kept offscreen
+                    for (li, layer) in layers.enumerated() {
+                        for i in 0..<layer.count {
+                            let x = rand(li, i, 0) * size.width
+                            var y = (rand(li, i, 1) * period - drift * layer.parallax)
+                                .truncatingRemainder(dividingBy: period)
+                            if y < 0 { y += period }
+                            y -= 60
+                            let r = layer.size.lowerBound
+                                  + (layer.size.upperBound - layer.size.lowerBound) * rand(li, i, 2)
+                            // Twinkle: idle, ~1/4 of stars pulse softly; energy
+                            // recruits more of them and deepens the pulse.
+                            let twinkles = rand(li, i, 3) < 0.25 + 0.55 * Double(energy)
+                            let amp = twinkles && !paused ? 0.35 + 0.5 * Double(energy) : 0
+                            let pulse = 1 + amp * sin(t * (0.8 + 1.6 * rand(li, i, 4))
+                                                      + rand(li, i, 5) * 2 * .pi)
+                            let alpha = min(1, Double(layer.alpha)
+                                               * (0.7 + 0.6 * rand(li, i, 6))
+                                               * pulse * (1 + 0.35 * Double(energy)))
+                            let tint = rand(li, i, 7)
+                            let color: Color = tint < 0.05 ? Palette.accentRedBright
+                                             : tint < 0.10 ? Palette.accentAquaBright
+                                             : Palette.ink
+                            let rect = CGRect(x: x - r / 2, y: y - r / 2, width: r, height: r)
+                            if r > 2 {   // biggest stars get a faint halo
+                                ctx.fill(Path(ellipseIn: rect.insetBy(dx: -r, dy: -r)),
+                                         with: .color(color.opacity(alpha * 0.15)))
+                            }
+                            ctx.fill(Path(ellipseIn: rect), with: .color(color.opacity(alpha)))
+                        }
+                    }
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// Two vast, near-invisible color washes at infinite distance — warm
+    /// maroon high left, the page's single teal counterpoint low right.
+    private var nebula: some View {
+        GeometryReader { geo in
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [Palette.accentRedInk.opacity(0.18 * nebulaDim), .clear],
+                                         center: .center, startRadius: 0, endRadius: 330))
+                    .frame(width: 660, height: 660)
+                    .position(x: geo.size.width * 0.18, y: geo.size.height * 0.28)
+                Circle()
+                    .fill(RadialGradient(colors: [Palette.accentTealInk.opacity(0.14 * nebulaDim), .clear],
+                                         center: .center, startRadius: 0, endRadius: 300))
+                    .frame(width: 600, height: 600)
+                    .position(x: geo.size.width * 0.88, y: geo.size.height * 0.78)
+            }
+        }
+    }
+
+    /// Deterministic pseudo-random in [0, 1) seeded by (layer, star, channel),
+    /// so the sky is stable frame to frame with no stored state.
+    private func rand(_ layer: Int, _ star: Int, _ channel: Int) -> Double {
+        let n = sin(Double(layer * 7919 + star * 104729 + channel * 1301) * 12.9898) * 43758.5453
+        return n - n.rounded(.down)
     }
 }
 

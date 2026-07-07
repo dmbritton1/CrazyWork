@@ -12,6 +12,10 @@ enum Palette {
     static let hairline        = dyn(dark: 0x242728, light: 0xe0e0e3)
     static let hairlineStrong  = dynA(dark: (1, 1, 1, 0.16), light: (0, 0, 0, 0.16))
     static let hairlineSoft    = dynA(dark: (1, 1, 1, 0.08), light: (0, 0, 0, 0.08))
+    // Today-path woven strands. Light matches hairline/mute so that mode is
+    // unchanged; dark goes near-white/bright-grey so the line actually reads.
+    static let trailStrand     = dynA(dark: (0.85, 0.87, 0.92, 0.95), light: (0, 0, 0, 0.16))
+    static let trailStrandMain = dyn(dark: 0xe4e5ea, light: 0x6a6b6c)
     static let ink             = dyn(dark: 0xf4f4f6, light: 0x101114)
     static let body            = dyn(dark: 0xcdcdcd, light: 0x3a3a3d)
     static let mute            = dyn(dark: 0x9c9c9d, light: 0x6a6b6c)
