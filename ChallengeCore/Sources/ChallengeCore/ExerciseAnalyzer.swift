@@ -137,6 +137,21 @@ public struct LungeAnalyzer: ExerciseAnalyzer {
     public mutating func reset() { counter = RepCounter(config: config) }
 }
 
+/// Average of two same-side joints when both clear the gate; otherwise the
+/// single available side; `nil` when neither is detected. Shared by the
+/// hold-style analyzers (plank, wall sit), which read the body as side-view
+/// midlines rather than per-side triples.
+func sideMidpoint(_ frame: PoseFrame, _ a: Joint, _ b: Joint, minConfidence: Double) -> Point2D? {
+    let pa = frame.point(a, minConfidence: minConfidence)
+    let pb = frame.point(b, minConfidence: minConfidence)
+    switch (pa, pb) {
+    case let (p1?, p2?): return Point2D(x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2)
+    case let (p1?, nil): return p1
+    case let (nil, p2?): return p2
+    case (nil, nil): return nil
+    }
+}
+
 /// Plank: a time-based hold. Counts seconds while the body is held *horizontal*
 /// — the plank position — and pauses when you stand up or the pose is lost.
 ///
@@ -277,9 +292,9 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     /// shoulder or both supports are undetected; `0` when supports exist but none
     /// are below the shoulder (e.g. arms overhead while lying flat).
     private func armTilt(_ frame: PoseFrame) -> Double? {
-        guard let shoulder = midpoint(frame, .leftShoulder, .rightShoulder) else { return nil }
-        let supports = [midpoint(frame, .leftWrist, .rightWrist),
-                        midpoint(frame, .leftElbow, .rightElbow)].compactMap { $0 }
+        guard let shoulder = sideMidpoint(frame, .leftShoulder, .rightShoulder, minConfidence: minConfidence) else { return nil }
+        let supports = [sideMidpoint(frame, .leftWrist, .rightWrist, minConfidence: minConfidence),
+                        sideMidpoint(frame, .leftElbow, .rightElbow, minConfidence: minConfidence)].compactMap { $0 }
         guard !supports.isEmpty else { return nil }
         let steepnesses = supports.compactMap { s -> Double? in
             guard shoulder.y > s.y else { return nil }   // shoulder must be above the support
@@ -292,9 +307,9 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
     /// Uses the widest reliably-detected segment so a missing ankle can't break
     /// it; `nil` only when fewer than two joint groups are visible.
     private func bodyTilt(_ frame: PoseFrame) -> Double? {
-        let shoulder = midpoint(frame, .leftShoulder, .rightShoulder)
-        let hip = midpoint(frame, .leftHip, .rightHip)
-        let ankle = midpoint(frame, .leftAnkle, .rightAnkle)
+        let shoulder = sideMidpoint(frame, .leftShoulder, .rightShoulder, minConfidence: minConfidence)
+        let hip = sideMidpoint(frame, .leftHip, .rightHip, minConfidence: minConfidence)
+        let ankle = sideMidpoint(frame, .leftAnkle, .rightAnkle, minConfidence: minConfidence)
         let segment: (Point2D, Point2D)?
         if let s = shoulder, let a = ankle { segment = (s, a) }       // widest span
         else if let s = shoulder, let h = hip { segment = (s, h) }    // feet out of frame
@@ -302,19 +317,6 @@ public struct PlankAnalyzer: ExerciseAnalyzer {
         else { segment = nil }
         guard let (p, q) = segment else { return nil }
         return atan2(abs(q.y - p.y), abs(q.x - p.x)) * 180 / .pi
-    }
-
-    /// Average of two same-side joints when both clear the gate; otherwise the
-    /// single available side; `nil` when neither is detected.
-    private func midpoint(_ frame: PoseFrame, _ a: Joint, _ b: Joint) -> Point2D? {
-        let pa = frame.point(a, minConfidence: minConfidence)
-        let pb = frame.point(b, minConfidence: minConfidence)
-        switch (pa, pb) {
-        case let (p1?, p2?): return Point2D(x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2)
-        case let (p1?, nil): return p1
-        case let (nil, p2?): return p2
-        case (nil, nil): return nil
-        }
     }
 
     public mutating func reset() {
@@ -424,6 +426,103 @@ public struct MountainClimberAnalyzer: ExerciseAnalyzer {
     }
 
     public mutating func reset() { counter = RepCounter(config: config) }
+}
+
+/// Wall sit: a time-based hold, side-view. Counts seconds while the knees are
+/// bent near 90° AND the torso is near vertical, pausing otherwise — the same
+/// smoothed + hysteresis gate recipe as the plank, with the plank's per-frame
+/// dt cap. The camera cannot see the wall, so a free-standing chair pose also
+/// counts (same isometric work). No form cues.
+public struct WallSitAnalyzer: ExerciseAnalyzer {
+    public let definition = ExerciseDefinition(id: "wallsit", displayName: "Wall Sit", goalUnit: .seconds, met: 4.0)
+    /// Knee angle band that *establishes* the hold, and the wider band that
+    /// *keeps* it (the extra width is the hysteresis margin). Standing
+    /// straightens past the top of the break band; sliding to the floor bends
+    /// below the bottom.
+    private let kneeEnter: ClosedRange<Double>
+    private let kneeBreak: ClosedRange<Double>
+    /// Torso tilt from vertical (degrees) allowed to enter / break the hold.
+    private let torsoEnterTilt: Double
+    private let torsoBreakTilt: Double
+    private let minConfidence: Double
+    private let smoothingWindow: Int
+    /// Cap per-frame time added, so a dropped-frame gap can't add a huge jump.
+    private let maxStep: TimeInterval = 0.5
+    private var kneeSmoother: MovingAverage
+    private var torsoSmoother: MovingAverage
+    /// Defaults false: a hold that was never established never counts.
+    private var kneeHeld = false
+    /// Defaults true: partial visibility doesn't rob credit once established.
+    private var torsoUpright = true
+    private var heldSeconds: Double = 0
+    private var lastTimestamp: TimeInterval?
+
+    public var progress: Double { heldSeconds }
+
+    public init(kneeEnter: ClosedRange<Double> = 70...110,
+                kneeBreak: ClosedRange<Double> = 55...125,
+                torsoEnterTilt: Double = 20, torsoBreakTilt: Double = 35,
+                smoothingWindow: Int = 5, minConfidence: Double = 0.5) {
+        self.kneeEnter = kneeEnter
+        self.kneeBreak = kneeBreak
+        self.torsoEnterTilt = torsoEnterTilt
+        self.torsoBreakTilt = torsoBreakTilt
+        self.smoothingWindow = smoothingWindow
+        self.minConfidence = minConfidence
+        self.kneeSmoother = MovingAverage(windowSize: smoothingWindow)
+        self.torsoSmoother = MovingAverage(windowSize: smoothingWindow)
+    }
+
+    public mutating func process(_ frame: PoseFrame) -> AnalyzerResult {
+        let dt: Double
+        if let last = lastTimestamp {
+            dt = min(max(frame.timestamp - last, 0), maxStep)
+        } else {
+            dt = 0
+        }
+        lastTimestamp = frame.timestamp
+
+        // Both gates hold their last verdict on unjudgeable frames.
+        let kneeRaw = kneeAngle(frame)
+        if let kneeRaw {
+            let k = kneeSmoother.add(kneeRaw)
+            kneeHeld = kneeHeld ? kneeBreak.contains(k) : kneeEnter.contains(k)
+        }
+        let torsoRaw = torsoTilt(frame)
+        if let torsoRaw {
+            let v = torsoSmoother.add(torsoRaw)
+            torsoUpright = torsoUpright ? v <= torsoBreakTilt : v <= torsoEnterTilt
+        }
+
+        if kneeHeld && torsoUpright { heldSeconds += dt }
+        return AnalyzerResult(progress: heldSeconds, didAdvance: false,
+                              poseVisible: kneeRaw != nil || torsoRaw != nil, formCue: nil)
+    }
+
+    /// Knee angle (hip·knee·ankle) read off the side-view midlines.
+    private func kneeAngle(_ frame: PoseFrame) -> Double? {
+        guard let hip = sideMidpoint(frame, .leftHip, .rightHip, minConfidence: minConfidence),
+              let knee = sideMidpoint(frame, .leftKnee, .rightKnee, minConfidence: minConfidence),
+              let ankle = sideMidpoint(frame, .leftAnkle, .rightAnkle, minConfidence: minConfidence) else { return nil }
+        return Geometry.angle(hip, knee, ankle)
+    }
+
+    /// Torso tilt from *vertical* in degrees (0 = upright against the wall,
+    /// 90 = horizontal). `nil` when shoulder or hip is undetected.
+    private func torsoTilt(_ frame: PoseFrame) -> Double? {
+        guard let shoulder = sideMidpoint(frame, .leftShoulder, .rightShoulder, minConfidence: minConfidence),
+              let hip = sideMidpoint(frame, .leftHip, .rightHip, minConfidence: minConfidence) else { return nil }
+        return atan2(abs(shoulder.x - hip.x), abs(shoulder.y - hip.y)) * 180 / .pi
+    }
+
+    public mutating func reset() {
+        kneeSmoother = MovingAverage(windowSize: smoothingWindow)
+        torsoSmoother = MovingAverage(windowSize: smoothingWindow)
+        kneeHeld = false
+        torsoUpright = true
+        heldSeconds = 0
+        lastTimestamp = nil
+    }
 }
 
 /// Maps an exercise id to a fresh analyzer, and lists all selectable exercises.

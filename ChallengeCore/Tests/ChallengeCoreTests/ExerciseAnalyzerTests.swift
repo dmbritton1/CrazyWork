@@ -326,6 +326,70 @@ struct ExerciseAnalyzerTests {
         #expect(a.progress == 0)
     }
 
+    /// Side-view wall sit: knee vertex at the origin with the given interior angle,
+    /// shoulder placed so the torso tilts `torsoTilt` degrees off vertical.
+    private func wallSitFrame(knee: Double, torsoTilt: Double, t: TimeInterval,
+                              kneeConfidence: Double = 0.9) -> PoseFrame {
+        let kRad = knee * .pi / 180, tRad = torsoTilt * .pi / 180
+        let hip = Point2D(x: cos(kRad), y: sin(kRad))
+        let kneeP = Point2D(x: 0, y: 0)
+        let ankle = Point2D(x: 1, y: 0)
+        let shoulder = Point2D(x: hip.x + sin(tRad), y: hip.y + cos(tRad))
+        func jp(_ p: Point2D, _ c: Double = 0.9) -> JointPoint { JointPoint(location: p, confidence: c) }
+        return PoseFrame(timestamp: t, joints: [
+            .leftShoulder: jp(shoulder), .rightShoulder: jp(shoulder),
+            .leftHip: jp(hip), .rightHip: jp(hip),
+            .leftKnee: jp(kneeP, kneeConfidence), .rightKnee: jp(kneeP, kneeConfidence),
+            .leftAnkle: jp(ankle), .rightAnkle: jp(ankle),
+        ])
+    }
+
+    @Test("WallSitAnalyzer accumulates seconds at ~90° knees with a vertical torso")
+    func wallSitAccumulates() {
+        var a = WallSitAnalyzer()
+        var t = 0.0
+        var last: AnalyzerResult?
+        for _ in 0..<10 { last = a.process(wallSitFrame(knee: 90, torsoTilt: 5, t: t)); t += 0.1 }
+        #expect(a.progress > 0)
+        #expect(last?.poseVisible == true)
+    }
+
+    @Test("WallSitAnalyzer pauses when standing up, keeping accumulated time")
+    func wallSitPausesOnStanding() {
+        var a = WallSitAnalyzer()
+        var t = 0.0
+        for _ in 0..<10 { _ = a.process(wallSitFrame(knee: 90, torsoTilt: 5, t: t)); t += 0.1 }
+        let held = a.progress
+        #expect(held > 0)
+        for _ in 0..<8 { _ = a.process(wallSitFrame(knee: 175, torsoTilt: 5, t: t)); t += 0.1 } // stand (transition)
+        let afterStanding = a.progress
+        for _ in 0..<5 { _ = a.process(wallSitFrame(knee: 175, torsoTilt: 5, t: t)); t += 0.1 }
+        #expect(abs(a.progress - afterStanding) < 1e-6) // fully stopped
+        #expect(a.progress >= held)                      // pause never erases time
+    }
+
+    @Test("WallSitAnalyzer pauses when the torso leans far off vertical")
+    func wallSitPausesOnLean() {
+        var a = WallSitAnalyzer()
+        var t = 0.0
+        for _ in 0..<10 { _ = a.process(wallSitFrame(knee: 90, torsoTilt: 5, t: t)); t += 0.1 }
+        #expect(a.progress > 0)
+        for _ in 0..<8 { _ = a.process(wallSitFrame(knee: 90, torsoTilt: 60, t: t)); t += 0.1 } // lean (transition)
+        let afterLean = a.progress
+        for _ in 0..<5 { _ = a.process(wallSitFrame(knee: 90, torsoTilt: 60, t: t)); t += 0.1 }
+        #expect(abs(a.progress - afterLean) < 1e-6)
+    }
+
+    @Test("WallSitAnalyzer never counts a hold that was never established")
+    func wallSitNeverEstablished() {
+        var a = WallSitAnalyzer()
+        var t = 0.0
+        // Torso is upright but the knees are never detected: the knee gate's
+        // default-false verdict must keep the clock at zero.
+        for _ in 0..<10 { _ = a.process(wallSitFrame(knee: 90, torsoTilt: 5, t: t, kneeConfidence: 0.1)); t += 0.1 }
+        #expect(a.progress == 0)
+    }
+
     @Test("registry returns fresh analyzers for known ids and nil otherwise")
     func registry() {
         #expect(ExerciseRegistry.makeAnalyzer(for: "pushup")?.definition.goalUnit == .reps)
