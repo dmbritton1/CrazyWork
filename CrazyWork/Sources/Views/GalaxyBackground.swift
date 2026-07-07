@@ -89,4 +89,12 @@ struct GalaxyBackground: View {
         let n = sin(Double(layer * 7919 + star * 104729 + channel * 1301) * 12.9898) * 43758.5453
         return n - n.rounded(.down)
     }
+
+    /// Meteor slot scheduling: each slot fires for `duration` seconds at the
+    /// start of every `period`. Returns the life phase 0…1 while firing,
+    /// nil while dormant — pure, so the Canvas stays stateless.
+    nonisolated static func meteorPhase(t: TimeInterval, period: Double, duration: Double) -> Double? {
+        let phase = t.truncatingRemainder(dividingBy: period) / duration
+        return phase < 1 ? phase : nil
+    }
 }
