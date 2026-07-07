@@ -659,6 +659,9 @@ public enum ExerciseRegistry {
         PlankAnalyzer().definition,
         SitupAnalyzer().definition,
         GluteBridgeAnalyzer().definition,
+        JumpingJackAnalyzer().definition,
+        MountainClimberAnalyzer().definition,
+        WallSitAnalyzer().definition,
     ]
 
     /// The definition for an exercise id, or `nil` if unknown.
@@ -684,6 +687,9 @@ public enum ExerciseRegistry {
         case "plank": return PlankAnalyzer()
         case "situp": return SitupAnalyzer()
         case "glutebridge": return GluteBridgeAnalyzer()
+        case "jumpingjack": return JumpingJackAnalyzer()
+        case "mountainclimber": return MountainClimberAnalyzer()
+        case "wallsit": return WallSitAnalyzer()
         default: return nil
         }
     }

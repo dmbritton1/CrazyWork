@@ -488,9 +488,13 @@ struct ExerciseAnalyzerTests {
         #expect(ExerciseRegistry.makeAnalyzer(for: "plank")?.definition.goalUnit == .seconds)
         #expect(ExerciseRegistry.makeAnalyzer(for: "situp")?.definition.goalUnit == .reps)
         #expect(ExerciseRegistry.makeAnalyzer(for: "glutebridge")?.definition.goalUnit == .reps)
+        #expect(ExerciseRegistry.makeAnalyzer(for: "jumpingjack")?.definition.goalUnit == .reps)
+        #expect(ExerciseRegistry.makeAnalyzer(for: "mountainclimber")?.definition.goalUnit == .reps)
+        #expect(ExerciseRegistry.makeAnalyzer(for: "wallsit")?.definition.goalUnit == .seconds)
         #expect(ExerciseRegistry.makeAnalyzer(for: "moonwalk") == nil)
         #expect(Set(ExerciseRegistry.all.map(\.id))
-                == ["pushup", "squat", "lunge", "plank", "situp", "glutebridge"])
+                == ["pushup", "squat", "lunge", "plank", "situp", "glutebridge",
+                    "jumpingjack", "mountainclimber", "wallsit"])
     }
 
     @Test("registry lookups resolve ids, with fallbacks for unknown ones")
