@@ -130,6 +130,40 @@ struct ExercisePoseIcon: View {
                 ],
                 joints: [CGPoint(x: 0.48, y: 0.46), CGPoint(x: 0.30, y: 0.44)],
                 groundY: 0.76)
+        case "jumpingjack": // front view mid-flight: arms overhead, legs apart
+            return Pose(
+                head: CGPoint(x: 0.50, y: 0.13),
+                chains: [
+                    [CGPoint(x: 0.50, y: 0.26), CGPoint(x: 0.50, y: 0.52)],
+                    [CGPoint(x: 0.34, y: 0.10), CGPoint(x: 0.50, y: 0.28)],
+                    [CGPoint(x: 0.66, y: 0.10), CGPoint(x: 0.50, y: 0.28)],
+                    [CGPoint(x: 0.50, y: 0.52), CGPoint(x: 0.34, y: 0.83)],
+                    [CGPoint(x: 0.50, y: 0.52), CGPoint(x: 0.66, y: 0.83)],
+                ],
+                joints: [CGPoint(x: 0.50, y: 0.28), CGPoint(x: 0.50, y: 0.52)],
+                groundY: 0.84)
+        case "mountainclimber": // plank base, one knee driven to the chest
+            return Pose(
+                head: CGPoint(x: 0.88, y: 0.40),
+                chains: [
+                    [CGPoint(x: 0.74, y: 0.46), CGPoint(x: 0.46, y: 0.54),
+                     CGPoint(x: 0.24, y: 0.66), CGPoint(x: 0.10, y: 0.80)],
+                    [CGPoint(x: 0.46, y: 0.54), CGPoint(x: 0.58, y: 0.66), CGPoint(x: 0.52, y: 0.80)],
+                    [CGPoint(x: 0.74, y: 0.46), CGPoint(x: 0.73, y: 0.64), CGPoint(x: 0.72, y: 0.80)],
+                ],
+                joints: [CGPoint(x: 0.46, y: 0.54), CGPoint(x: 0.58, y: 0.66)],
+                groundY: 0.81)
+        case "wallsit":     // back on the wall line, thighs level, shins vertical
+            return Pose(
+                head: CGPoint(x: 0.42, y: 0.22),
+                chains: [
+                    [CGPoint(x: 0.30, y: 0.14), CGPoint(x: 0.30, y: 0.83)],   // the wall
+                    [CGPoint(x: 0.38, y: 0.32), CGPoint(x: 0.36, y: 0.56),
+                     CGPoint(x: 0.60, y: 0.58), CGPoint(x: 0.60, y: 0.83), CGPoint(x: 0.70, y: 0.83)],
+                    [CGPoint(x: 0.38, y: 0.36), CGPoint(x: 0.48, y: 0.52)],
+                ],
+                joints: [CGPoint(x: 0.36, y: 0.56), CGPoint(x: 0.60, y: 0.58)],
+                groundY: 0.84)
         default:            // generic standing figure
             return Pose(
                 head: CGPoint(x: 0.50, y: 0.14),
