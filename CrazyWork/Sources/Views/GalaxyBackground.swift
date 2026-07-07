@@ -14,11 +14,15 @@ struct GalaxyBackground: View {
     private var nebulaDim: Double { scheme == .dark ? 1 : 0.35 }
 
     private struct Layer { let count: Int; let parallax: CGFloat
-                           let size: ClosedRange<CGFloat>; let alpha: CGFloat }
+                           let size: ClosedRange<CGFloat>; let alpha: CGFloat
+                           var soft = false }
     private let layers: [Layer] = [
         Layer(count: 48, parallax: 0.10, size: 0.7...1.3, alpha: 0.20),   // far
         Layer(count: 36, parallax: 0.24, size: 0.9...1.8, alpha: 0.32),   // mid
         Layer(count: 24, parallax: 0.44, size: 1.3...2.4, alpha: 0.48),   // near
+        // So close it's out of focus: a handful of big soft dots drifting
+        // fastest of all — the "bokeh" plane in front of the stars.
+        Layer(count: 8, parallax: 0.62, size: 5...9, alpha: 0.13, soft: true),
     ]
 
     var body: some View {
@@ -37,6 +41,24 @@ struct GalaxyBackground: View {
                             y -= 60
                             let r = layer.size.lowerBound
                                   + (layer.size.upperBound - layer.size.lowerBound) * rand(li, i, 2)
+                            if layer.soft {
+                                // Out-of-focus dot: a radial gradient fakes the
+                                // blur (no Canvas filter), and a slow wobble
+                                // replaces the twinkle.
+                                let tint = rand(li, i, 7)
+                                let color: Color = tint < 0.05 ? Palette.accentRedBright
+                                                 : tint < 0.10 ? Palette.accentAquaBright
+                                                 : Palette.ink
+                                let wobble = paused ? 1 : 1 + 0.2 * sin(t * 0.25 + rand(li, i, 4) * 2 * .pi)
+                                let alpha = Double(layer.alpha) * (0.7 + 0.6 * rand(li, i, 6)) * wobble
+                                ctx.fill(Path(ellipseIn: CGRect(x: x - r / 2, y: y - r / 2,
+                                                                width: r, height: r)),
+                                         with: .radialGradient(
+                                            Gradient(colors: [color.opacity(alpha), color.opacity(0)]),
+                                            center: CGPoint(x: x, y: y),
+                                            startRadius: 0, endRadius: r / 2))
+                                continue
+                            }
                             // Twinkle: idle, ~1/4 of stars pulse softly; energy
                             // recruits more of them and deepens the pulse.
                             let twinkles = rand(li, i, 3) < 0.25 + 0.55 * Double(energy)
