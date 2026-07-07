@@ -126,21 +126,34 @@ struct GalaxyBackground: View {
 
     /// Two vast, near-invisible color washes at infinite distance — warm
     /// maroon high left, the page's single teal counterpoint low right.
+    /// They breathe on slow, offset cycles (scale ±5%, opacity ±6%) and
+    /// drift with scroll slower than the farthest stars, so they read as
+    /// alive but infinitely far. 8 fps is plenty for 20-second cycles.
     private var nebula: some View {
-        GeometryReader { geo in
-            ZStack {
-                Circle()
-                    .fill(RadialGradient(colors: [Palette.accentRedInk.opacity(0.18 * nebulaDim), .clear],
-                                         center: .center, startRadius: 0, endRadius: 330))
-                    .frame(width: 660, height: 660)
-                    .position(x: geo.size.width * 0.18, y: geo.size.height * 0.28)
-                Circle()
-                    .fill(RadialGradient(colors: [Palette.accentTealInk.opacity(0.14 * nebulaDim), .clear],
-                                         center: .center, startRadius: 0, endRadius: 300))
-                    .frame(width: 600, height: 600)
-                    .position(x: geo.size.width * 0.88, y: geo.size.height * 0.78)
+        TimelineView(.animation(minimumInterval: 1.0 / 8, paused: paused)) { timeline in
+            let t = paused ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            GeometryReader { geo in
+                ZStack {
+                    Circle()
+                        .fill(RadialGradient(
+                            colors: [Palette.accentRedInk.opacity(
+                                0.18 * nebulaDim * (1 + 0.06 * sin(t / 17 * 2 * .pi))), .clear],
+                            center: .center, startRadius: 0, endRadius: 330))
+                        .frame(width: 660, height: 660)
+                        .scaleEffect(1 + 0.05 * sin(t / 22 * 2 * .pi))
+                        .position(x: geo.size.width * 0.18, y: geo.size.height * 0.28)
+                    Circle()
+                        .fill(RadialGradient(
+                            colors: [Palette.accentTealInk.opacity(
+                                0.14 * nebulaDim * (1 + 0.06 * sin(t / 17 * 2 * .pi + 2.1))), .clear],
+                            center: .center, startRadius: 0, endRadius: 300))
+                        .frame(width: 600, height: 600)
+                        .scaleEffect(1 + 0.05 * sin(t / 22 * 2 * .pi + 3.7))
+                        .position(x: geo.size.width * 0.88, y: geo.size.height * 0.78)
+                }
             }
         }
+        .offset(y: -drift * 0.05)   // parallax: slower than the farthest stars
     }
 
     /// Deterministic pseudo-random in [0, 1) seeded by (layer, star, channel),
