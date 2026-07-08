@@ -1,6 +1,17 @@
 import Foundation
 import HealthKit
 import Observation
+import WatchKit
+
+/// The phone's last `progress` message, decoded for the wrist display.
+struct WorkoutProgress: Equatable {
+    var exerciseName: String
+    var value: Int
+    var target: Int
+    var setIndex: Int
+    var setCount: Int
+    var phase: SessionPhaseMessage
+}
 
 /// Runs the real workout session on the watch: collects heart rate and active
 /// energy via HKLiveWorkoutBuilder, mirrors the session to the phone, and
@@ -12,6 +23,7 @@ final class WatchSessionController: NSObject {
 
     private(set) var heartRate: Double?
     private(set) var isRunning = false
+    private(set) var progress: WorkoutProgress?
 
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
@@ -74,6 +86,7 @@ final class WatchSessionController: NSObject {
         self.builder = nil
         isRunning = false
         heartRate = nil
+        progress = nil
     }
 
     private func send(_ message: WatchMessage) {
@@ -92,6 +105,18 @@ final class WatchSessionController: NSObject {
             .doubleValue(for: .kilocalorie()) ?? 0
         if let hr { heartRate = hr }
         send(.metrics(heartRate: hr ?? heartRate ?? 0, activeEnergyKcal: kcal))
+    }
+
+    /// Distinct taps per cue: countdown click, set-complete success chime,
+    /// rest-over start tap, workout-complete notification.
+    private func play(_ cue: HapticCue) {
+        let type: WKHapticType = switch cue {
+        case .countdown: .click
+        case .setComplete: .success
+        case .restOver: .start
+        case .workoutComplete: .notification
+        }
+        WKInterfaceDevice.current().play(type)
     }
 }
 
@@ -120,7 +145,18 @@ extension WatchSessionController: HKWorkoutSessionDelegate {
         Task { @MainActor in
             for item in data {
                 guard let message = try? WatchMessage.decode(item) else { continue }
-                if case .end = message { self.end() }
+                switch message {
+                case .end:
+                    self.end()
+                case let .haptic(cue):
+                    self.play(cue)
+                case let .progress(exerciseName, value, target, setIndex, setCount, phase):
+                    self.progress = WorkoutProgress(exerciseName: exerciseName, value: value,
+                                                    target: target, setIndex: setIndex,
+                                                    setCount: setCount, phase: phase)
+                case .metrics, .ended:
+                    break // watch → phone traffic; ignore if echoed back
+                }
             }
         }
     }
