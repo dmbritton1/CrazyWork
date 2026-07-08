@@ -55,6 +55,11 @@ final class WatchSessionController: NSObject {
         }
     }
 
+    /// Wrist buttons: fire-and-forget commands to the phone workout.
+    func sendControl(_ control: WatchControl) {
+        send(.control(control))
+    }
+
     /// Stop collecting, save the workout (rings credit, measured calories),
     /// and tell the phone the measured total via `.ended`.
     func end() {

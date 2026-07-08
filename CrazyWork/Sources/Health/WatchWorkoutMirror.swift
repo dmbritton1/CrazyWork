@@ -16,6 +16,9 @@ final class WatchWorkoutMirror: NSObject {
     private(set) var watchActiveEnergyKcal: Double?
     /// Set when the watch sends `.ended` — its measured total after saving.
     private(set) var watchEndedEnergyKcal: Double?
+    /// Fired on the main actor when the wrist issues a command. Set by the
+    /// live workout flow; nil drops controls (e.g. after the view is gone).
+    var onControl: ((WatchControl) -> Void)?
 
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
@@ -82,8 +85,10 @@ final class WatchWorkoutMirror: NSObject {
         case let .ended(activeEnergyKcal):
             watchEndedEnergyKcal = activeEnergyKcal
             resumeEndAcknowledgement()
-        case .progress, .haptic, .end, .control:
-            break // phone → watch / watch → phone messages; ignore if echoed back
+        case let .control(control):
+            onControl?(control)
+        case .progress, .haptic, .end:
+            break // phone → watch messages; ignore if echoed back
         }
     }
 }

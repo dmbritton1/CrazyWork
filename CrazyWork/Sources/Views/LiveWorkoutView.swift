@@ -197,6 +197,16 @@ struct LiveWorkoutView: View {
     private func run() async {
         workoutStart = Date()
         coordinator.start()
+        watchMirror.onControl = { control in
+            switch control {
+            case .skipRest:
+                advanceFromRest() // idempotent: no-op unless resting
+            case .endWorkout:
+                for event in coordinator.finishEarly() { forward(event) }
+                // The frame loop sees .finished on the next frame and exits
+                // into saveIfNeeded(), same as a natural completion.
+            }
+        }
         // Watch session writes HR samples and workouts to Health, so the
         // health-sync opt-out gates it, same as the phone's save path.
         if healthSyncEnabled && watchWorkoutEnabled {

@@ -28,6 +28,7 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
 /// first progress message arrives.
 struct WatchWorkoutView: View {
     @State private var controller = WatchSessionController.shared
+    @State private var confirmingEnd = false
 
     var body: some View {
         VStack(spacing: 6) {
@@ -39,6 +40,14 @@ struct WatchWorkoutView: View {
                     Text("Workout in progress")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+                if controller.progress?.phase != .finished {
+                    Button("End", role: .destructive) { confirmingEnd = true }
+                        .confirmationDialog("End workout?", isPresented: $confirmingEnd) {
+                            Button("End Workout", role: .destructive) {
+                                controller.sendControl(.endWorkout)
+                            }
+                        }
                 }
             } else {
                 Text("Start a workout on your iPhone")
@@ -56,6 +65,7 @@ struct WatchWorkoutView: View {
                 .font(.body)
                 .multilineTextAlignment(.center)
             heartRateLabel(size: 24)
+            Button("Skip Rest") { controller.sendControl(.skipRest) }
         case .finished:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 36))
