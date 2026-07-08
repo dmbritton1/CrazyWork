@@ -198,7 +198,9 @@ struct PathView: View {
                 // Figure side: sign of the perch normal against the line's
                 // continuous left normal (-u.dy, u.dx).
                 let side: CGFloat = (f.o.dx * -f.u.dy + f.o.dy * f.u.dx) >= 0 ? 1 : -1
-                return (y: f.best.y, bulge: isToday ? 48 : 44, side: side)
+                // Tight berth: just clear of the glyph (half ≈ 18–22pt above
+                // the perch), so the line visibly hugs the figure.
+                return (y: f.best.y, bulge: isToday ? 38 : 34, side: side)
             }
             ZStack(alignment: .topLeading) {
                 ZStack(alignment: .topLeading) {
@@ -214,10 +216,10 @@ struct PathView: View {
                 .distortionEffect(
                     ShaderLibrary.trailLens(
                         .floatArray(points.flatMap { [Float($0.x), Float($0.y)] }),
-                        .float(Float(nodeSize) * 2.1),
-                        .float(1.3),
+                        .float(Float(nodeSize) * 1.5),
+                        .float(0.9),
                         .float(0.8)),
-                    maxSampleOffset: CGSize(width: 44, height: 44))
+                    maxSampleOffset: CGSize(width: 26, height: 26))
                 // Inertia from scroll velocity: the ribbon lags a touch and
                 // its amplitude tenses, then springs back. Nodes stay put.
                 .offset(y: stretch * -14)
@@ -266,8 +268,17 @@ struct PathView: View {
         // Several grey strands sharing the spine, each with its own phase and
         // a slow flutter — languid enough that the band bends back and forth
         // without micro-squiggle between the workouts.
+        // The central strand is GAPPED across each figure's pocket: the
+        // detour arc (which leaves and rejoins it tangentially) becomes the
+        // line's route around the body, so nothing crosses a glyph.
+        let gaps = detours.map { ($0.y - $0.bulge * 2.8)...($0.y + $0.bulge * 2.8) }
         let main = ribbonPath(height: height, spine: spine, amp: amp,
-                              wiggleAmp: Self.wiggleAmp, wiggleFreq: Self.wiggleFreq)
+                              wiggleAmp: Self.wiggleAmp, wiggleFreq: Self.wiggleFreq,
+                              gaps: gaps)
+        // The offset echo reuses the central strand's shape but NOT its gaps —
+        // its gaps would float 46pt beside the figures as stray line ends.
+        let mainEcho = ribbonPath(height: height, spine: spine, amp: amp,
+                                  wiggleAmp: Self.wiggleAmp, wiggleFreq: Self.wiggleFreq)
         let a = ribbonPath(height: height, spine: spine, amp: amp, phase: 1.3, wiggleAmp: 0.07, wiggleFreq: 0.020)
         let b = ribbonPath(height: height, spine: spine, amp: amp, phase: 3.7, wiggleAmp: 0.09, wiggleFreq: 0.014)
         // One detour per figure: peels off the central strand upstream, bows
@@ -276,6 +287,8 @@ struct PathView: View {
         // two close the pocket. All detours share one path, one stroke.
         var arc = Path()
         for d in detours { arc.addPath(detourPath(nodeY: d.y, bulge: d.bulge, side: d.side, spine: spine, amp: amp)) }
+        var traveled = main
+        traveled.addPath(arc)
         let stroke = { (w: CGFloat) in StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round) }
         // Parallax: each echo drifts vertically at its own small rate as you
         // scroll, so the woven band separates into near/far layers. The
@@ -285,7 +298,7 @@ struct PathView: View {
             // Grey echoes run free: the trailLens shader sweeps them around
             // each figure, so proximity to a node reads as bent light, not
             // clutter — no masking needed.
-            main.stroke(Palette.trailStrand, style: stroke(1.4))
+            mainEcho.stroke(Palette.trailStrand, style: stroke(1.4))
                 .offset(x: 46, y: drift * 0.06).opacity(0.42)
             a.stroke(Palette.trailStrand, style: stroke(1.3))
                 .offset(x: 22, y: drift * 0.03).opacity(0.55)
@@ -298,9 +311,11 @@ struct PathView: View {
             // Trail ink: the stretch above the viewport center reads as
             // already traveled — the central strand tints brand red behind
             // you, dissolving back to grey over ~180pt around the center.
+            // The ink covers the detour arcs too, so the traveled line flows
+            // around each figure instead of dying at the gap.
             ZStack {
-                main.stroke(Palette.brandRed.opacity(0.22), style: stroke(7)).blur(radius: 5)
-                main.stroke(Palette.brandRed.opacity(0.75), style: stroke(2.4))
+                traveled.stroke(Palette.brandRed.opacity(0.22), style: stroke(7)).blur(radius: 5)
+                traveled.stroke(Palette.brandRed.opacity(0.75), style: stroke(2.4))
             }
             .mask(inkMask(inkY: inkY, height: height))
         }
@@ -323,11 +338,17 @@ struct PathView: View {
     /// each strand runs off both edges.
     private func ribbonPath(height: CGFloat, spine: TrailSpine, amp: CGFloat,
                             phase: Double = 0, wiggleAmp: Double = 0,
-                            wiggleFreq: Double = 0) -> Path {
+                            wiggleFreq: Double = 0,
+                            gaps: [ClosedRange<CGFloat>] = []) -> Path {
         Path { p in
             var y: CGFloat = -rowHeight
             var first = true
             while y <= height + rowHeight {
+                if gaps.contains(where: { $0.contains(y) }) {
+                    first = true            // lift the pen across a gap
+                    y += 6
+                    continue
+                }
                 let extra = wiggleAmp == 0 ? 0 : wiggleAmp * sin(Double(y) * wiggleFreq + phase)
                 let x = spine.x(y) + CGFloat(extra) * amp
                 let pt = CGPoint(x: x, y: y)
