@@ -32,9 +32,10 @@ struct PathView: View {
     private static let wiggleAmp = 0.035
     private static let wiggleFreq = 0.028
     /// Clear air kept around each figure: grey echo strands are masked out
-    /// inside this radius so only the central strand (which detours) comes
-    /// near a figure.
-    private let breathR: CGFloat = 48
+    /// inside this radius. Small enough that echoes graze the lens and get
+    /// visibly bent around the figure; the innermost stretch still fades so
+    /// nothing crosses the glyph itself.
+    private let breathR: CGFloat = 28
 
     private var today: Int { PathProgram.epochDay(Date()) }
     private var progress: PathProgress {
@@ -211,27 +212,20 @@ struct PathView: View {
                              inkY: reduceMotion ? 0 : inkY,
                              holes: points, detours: detours)
                 }
+                // Gravitational aura: a Metal lens bends the strands around
+                // each figure — pure light distortion, no material, no rim.
+                // Applied in trail coordinates (before the stretch transforms)
+                // so each lens stays pinned to its perch.
+                .distortionEffect(
+                    ShaderLibrary.trailLens(
+                        .floatArray(points.flatMap { [Float($0.x), Float($0.y)] }),
+                        .float(Float(nodeSize) * 1.4),
+                        .float(1.4)),
+                    maxSampleOffset: CGSize(width: 24, height: 24))
                 // Inertia from scroll velocity: the ribbon lags a touch and
                 // its amplitude tenses, then springs back. Nodes stay put.
                 .offset(y: stretch * -14)
                 .scaleEffect(x: 1 - abs(stretch) * 0.04)
-                // Gravitational lenses: clear Liquid Glass discs pinned at
-                // each perch refract the strands and sky rendering behind
-                // them — light bends around the workouts. Figures and
-                // labels draw above, crisp. Pre-26 skips the lens.
-                if #available(iOS 26, *) {
-                    GlassEffectContainer {
-                        ZStack(alignment: .topLeading) {
-                            ForEach(Array(windowIndices.enumerated()), id: \.element) { local, _ in
-                                Color.clear
-                                    .frame(width: nodeSize * 1.35, height: nodeSize * 1.35)
-                                    .glassEffect(.clear, in: .circle)
-                                    .position(points[local])
-                            }
-                        }
-                    }
-                    .allowsHitTesting(false)
-                }
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
                     // Figure sits on the line: tilt it to the strand's slope
                     // under the perch. The tangent always points down-page,
