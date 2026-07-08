@@ -31,11 +31,6 @@ struct PathView: View {
     /// drawn line.
     private static let wiggleAmp = 0.035
     private static let wiggleFreq = 0.028
-    /// Clear air kept around each figure: grey echo strands are masked out
-    /// inside this radius. Small enough that echoes graze the lens and get
-    /// visibly bent around the figure; the innermost stretch still fades so
-    /// nothing crosses the glyph itself.
-    private let breathR: CGFloat = 28
 
     private var today: Int { PathProgram.epochDay(Date()) }
     private var progress: PathProgress {
@@ -207,10 +202,10 @@ struct PathView: View {
             }
             ZStack(alignment: .topLeading) {
                 ZStack(alignment: .topLeading) {
-                    flowLine(width: geo.size.width, height: height, spine: spine, amp: amp,
+                    flowLine(height: height, spine: spine, amp: amp,
                              drift: reduceMotion ? 0 : scrollY,
                              inkY: reduceMotion ? 0 : inkY,
-                             holes: points, detours: detours)
+                             detours: detours)
                 }
                 // Gravitational aura: a Metal lens bends the strands around
                 // each figure — pure light distortion, no material, no rim.
@@ -219,9 +214,10 @@ struct PathView: View {
                 .distortionEffect(
                     ShaderLibrary.trailLens(
                         .floatArray(points.flatMap { [Float($0.x), Float($0.y)] }),
-                        .float(Float(nodeSize) * 1.4),
-                        .float(1.4)),
-                    maxSampleOffset: CGSize(width: 24, height: 24))
+                        .float(Float(nodeSize) * 1.5),
+                        .float(1.0),
+                        .float(1.0)),
+                    maxSampleOffset: CGSize(width: 32, height: 32))
                 // Inertia from scroll velocity: the ribbon lags a touch and
                 // its amplitude tenses, then springs back. Nodes stay put.
                 .offset(y: stretch * -14)
@@ -246,20 +242,6 @@ struct PathView: View {
                         }
                         .position(points[local])
                 }
-                // The fastest-drifting echo rides ABOVE the trail: it slides
-                // over the detours and ink so the parallax reads in both
-                // directions, but the mask keeps it out of every figure's
-                // pocket of air.
-                ribbonPath(height: height, spine: spine, amp: amp,
-                           wiggleAmp: Self.wiggleAmp, wiggleFreq: Self.wiggleFreq)
-                    .stroke(Palette.trailStrand,
-                            style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
-                    .offset(x: -50, y: (reduceMotion ? 0 : scrollY) * -0.08)
-                    .opacity(0.30)
-                    .offset(y: stretch * -14)
-                    .scaleEffect(x: 1 - abs(stretch) * 0.04)
-                    .mask(breathingRoom(width: geo.size.width, height: height, holes: points))
-                    .allowsHitTesting(false)
             }
         }
         .frame(height: rowHeight * CGFloat(windowIndices.count) + topExtra)
@@ -278,8 +260,8 @@ struct PathView: View {
 
     /// The ribbon threads THROUGH the workouts: its spine is a spline over the
     /// node anchors, dressed with two fainter offset echoes for depth.
-    private func flowLine(width: CGFloat, height: CGFloat, spine: TrailSpine, amp: CGFloat,
-                          drift: CGFloat, inkY: CGFloat, holes: [CGPoint],
+    private func flowLine(height: CGFloat, spine: TrailSpine, amp: CGFloat,
+                          drift: CGFloat, inkY: CGFloat,
                           detours: [(y: CGFloat, bulge: CGFloat, side: CGFloat)]) -> some View {
         // Several grey strands sharing the spine, each with its own phase and
         // a slow flutter — languid enough that the band bends back and forth
@@ -300,18 +282,15 @@ struct PathView: View {
         // central strand stays locked to the nodes. Strands overrun both
         // edges by rowHeight in ribbonPath, which covers the largest drift.
         return ZStack {
-            // Grey echoes never run through a figure: the mask (applied after
-            // the drift offsets, so the holes stay pinned to the figures)
-            // clears a pocket of air around each one.
-            ZStack {
-                main.stroke(Palette.trailStrand, style: stroke(1.4))
-                    .offset(x: 46, y: drift * 0.06).opacity(0.42)
-                a.stroke(Palette.trailStrand, style: stroke(1.3))
-                    .offset(x: 22, y: drift * 0.03).opacity(0.55)
-                b.stroke(Palette.trailStrand, style: stroke(1.3))
-                    .offset(x: -24, y: drift * -0.04).opacity(0.55)
-            }
-            .mask(breathingRoom(width: width, height: height, holes: holes))
+            // Grey echoes run free: the trailLens shader sweeps them around
+            // each figure, so proximity to a node reads as bent light, not
+            // clutter — no masking needed.
+            main.stroke(Palette.trailStrand, style: stroke(1.4))
+                .offset(x: 46, y: drift * 0.06).opacity(0.42)
+            a.stroke(Palette.trailStrand, style: stroke(1.3))
+                .offset(x: 22, y: drift * 0.03).opacity(0.55)
+            b.stroke(Palette.trailStrand, style: stroke(1.3))
+                .offset(x: -24, y: drift * -0.04).opacity(0.55)
             // Enclosure arc: shares the spine, so between figures it lies on
             // the central strand as one line and only peels off around figures.
             arc.stroke(Palette.trailStrandMain.opacity(0.65), style: stroke(1.8))
@@ -325,21 +304,6 @@ struct PathView: View {
             }
             .mask(inkMask(inkY: inkY, height: height))
         }
-    }
-
-    /// Mask that is everything EXCEPT a clear circle around each figure —
-    /// even-odd fill punches the holes, and the blur feathers their edges so
-    /// strands dissolve toward a figure instead of snapping off. The rect
-    /// overruns all edges so the strands' offscreen extensions aren't clipped.
-    private func breathingRoom(width: CGFloat, height: CGFloat, holes: [CGPoint]) -> some View {
-        var p = Path()
-        p.addRect(CGRect(x: -120, y: -rowHeight * 2,
-                         width: width + 240, height: height + rowHeight * 4))
-        for c in holes {
-            p.addEllipse(in: CGRect(x: c.x - breathR, y: c.y - breathR,
-                                    width: breathR * 2, height: breathR * 2))
-        }
-        return p.fill(style: FillStyle(eoFill: true)).blur(radius: 14)
     }
 
     /// Mask that is solid from the trail's top down to just above `inkY`, then
