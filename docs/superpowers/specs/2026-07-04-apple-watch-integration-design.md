@@ -1,6 +1,7 @@
 # Apple Watch Integration — Design
 
-**Date:** 2026-07-04
+**Date:** 2026-07-04 (amended 2026-07-07: phases 1–2 shipped; added settings
+toggle, wrist remote control as phase 6)
 **Status:** Approved approach (A: workout session mirroring), phased delivery
 
 ## Goal
@@ -72,7 +73,10 @@ not a new package — ChallengeCore stays pose-only):
 - `metrics(heartRate: Double, activeEnergyKcal: Double)` — watch → phone
 - `progress(exerciseName: String, value: Int, target: Int, setIndex: Int, setCount: Int, phase: SessionPhase)` — phone → watch, where `SessionPhase` is `active | resting | finished` (mirrors `SessionCoordinator.phase`)
 - `haptic(HapticCue)` — phone → watch (`countdown`, `setComplete`, `restOver`, `workoutComplete`)
+- `control(WatchControl)` — watch → phone (`skipRest`, `endWorkout`), phase 6
 - `end` — phone → watch
+- `ended(activeEnergyKcal:)` — watch → phone, acknowledges `end` with the
+  measured total (drives the save-ownership rule)
 
 Encoded with `JSONEncoder` over the mirrored session's data channel. The
 codec round-trip is unit-tested.
@@ -143,6 +147,22 @@ Each phase is independently shippable and demo-able in the simulator.
    component), effort/recovery trends in `StatsView`. Works for any workout
    with HR data regardless of phases 1–4. *Done when: a summary shows an HR
    chart for a workout that has samples and hides it for one that doesn't.*
+6. **Wrist remote control** — users stand ~6 ft from the phone so the camera
+   can see them; ending rest early or ending the workout shouldn't require
+   walking back. New watch → phone `control` message with two commands:
+   - `skipRest` — phone calls `SessionCoordinator.beginNextSet()` (the same
+     thing the rest screen's completion does). Watch shows the button only
+     while its last `progress.phase` is `resting`.
+   - `endWorkout` — coordinator gains `finishEarly()`: record the in-progress
+     set as a partial `SetResult`, set phase to `.finished`, emit `.finished`.
+     The existing save path (including watch save-ownership) then runs
+     unchanged. The watch asks "End workout?" with a confirm tap first —
+     an accidental end discards nothing but is irreversible.
+   Unknown/late `control` messages (e.g. skipRest arriving after rest ended)
+   are ignored — the coordinator's phase guards already make them no-ops.
+   *Done when: tapping Skip Rest on the watch simulator advances the phone's
+   rest screen within ~1s, and End Workout lands on the phone summary with
+   the partial set recorded.*
 
 ## Error handling
 
@@ -165,9 +185,19 @@ Each phase is independently shippable and demo-able in the simulator.
 - **Hardware:** deferred until a physical watch is available; no design
   dependency on it.
 
+## Settings (shipped 2026-07-07)
+
+One toggle: "Use Apple Watch during workouts" (`watchWorkoutEnabled`,
+`@AppStorage`, default on) in the Profile tab's Apple Health card, disabled
+until Health sync is on. `LiveWorkoutView` starts the mirror only when both
+`healthSyncEnabled` and `watchWorkoutEnabled` are set. No other settings:
+haptics get a toggle only if users ask, and the watch has nothing else
+configurable.
+
 ## Out of scope
 
 - Starting workouts from the watch (the camera is the app; phone initiates).
+  Controlling an already-running workout from the watch is in scope (phase 6).
 - Watch complications, always-on-display tuning, standalone watch app.
 - watchOS < 11 / iOS < 18 support.
 - HR-reactive coaching ("slow down, zone 4") — possible later on top of
