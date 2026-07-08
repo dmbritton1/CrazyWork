@@ -82,6 +82,21 @@ final class HealthStore {
         }
     }
 
+    /// Average heart rate over the interval, nil when no samples/denied.
+    func averageHeartRate(start: Date, end: Date) async -> Double? {
+        guard isAvailable else { return nil }
+        let type = HKQuantityType(.heartRate)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        return await withCheckedContinuation { (cont: CheckedContinuation<Double?, Never>) in
+            let q = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate,
+                                      options: .discreteAverage) { _, stats, _ in
+                cont.resume(returning: stats?.averageQuantity()?.doubleValue(for: unit))
+            }
+            store.execute(q)
+        }
+    }
+
     /// Latest sample value for a quantity type, extracted to a Sendable Double
     /// inside the callback (no HKQuantity crosses actors).
     private func latestValue(_ id: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {

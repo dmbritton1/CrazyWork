@@ -6,6 +6,9 @@ import Charts
 /// consistency calendar — aggregated across all saved workouts.
 struct StatsView: View {
     @Query(sort: \WorkoutSession.startedAt) private var sessions: [WorkoutSession]
+    /// Avg BPM per workout, keyed by session start. Loaded best-effort; the
+    /// card only renders with 2+ points.
+    @State private var avgHeartRates: [Date: Double] = [:]
 
     var body: some View {
         ZStack {
@@ -32,6 +35,16 @@ struct StatsView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            // ponytail: one query per session, newest 30 — batch to a single
+            // collection query if libraries of workouts make this slow.
+            for session in sessions.suffix(30) {
+                guard let end = session.endedAt, end > session.startedAt else { continue }
+                if let avg = await HealthStore.shared.averageHeartRate(start: session.startedAt, end: end) {
+                    avgHeartRates[session.startedAt] = avg
+                }
+            }
+        }
     }
 
     private var stats: ProgressStats {
@@ -95,6 +108,7 @@ struct StatsView: View {
             trendCard("Hold seconds per workout", color: Palette.accentAqua, stats: stats) { Double($0.holdSeconds) }
             trendCard("Form % per workout", color: Palette.accentGreen, stats: stats,
                       domain: 0...100) { $0.formScore * 100 }
+            if avgHeartRates.count >= 2 { heartRateTrendCard }
         }
     }
 
@@ -122,6 +136,31 @@ struct StatsView: View {
                 }
             }
             .modifier(OptionalYDomain(domain: domain))
+        }
+    }
+
+    /// Effort trend: average BPM per workout, same visual voice as the other
+    /// trend cards but fed from HealthKit instead of ProgressStats.
+    private var heartRateTrendCard: some View {
+        let points = avgHeartRates.sorted { $0.key < $1.key }
+        let last = points.last
+        return ChartCard(title: "Avg heart rate per workout") {
+            Chart {
+                ForEach(points, id: \.key) { date, bpm in
+                    AreaMark(x: .value("Date", date), y: .value("BPM", bpm))
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(LinearGradient.trendFill(Palette.brandRed))
+                    LineMark(x: .value("Date", date), y: .value("BPM", bpm))
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        .foregroundStyle(Palette.brandRed)
+                }
+                if let last {
+                    PointMark(x: .value("Date", last.key), y: .value("BPM", last.value))
+                        .symbolSize(40)
+                        .foregroundStyle(Palette.brandRed)
+                }
+            }
         }
     }
 
