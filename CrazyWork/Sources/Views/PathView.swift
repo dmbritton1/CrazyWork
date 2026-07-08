@@ -215,6 +215,23 @@ struct PathView: View {
                 // its amplitude tenses, then springs back. Nodes stay put.
                 .offset(y: stretch * -14)
                 .scaleEffect(x: 1 - abs(stretch) * 0.04)
+                // Gravitational lenses: clear Liquid Glass discs pinned at
+                // each perch refract the strands and sky rendering behind
+                // them — light bends around the workouts. Figures and
+                // labels draw above, crisp. Pre-26 skips the lens.
+                if #available(iOS 26, *) {
+                    GlassEffectContainer {
+                        ZStack(alignment: .topLeading) {
+                            ForEach(Array(windowIndices.enumerated()), id: \.element) { local, _ in
+                                Color.clear
+                                    .frame(width: nodeSize * 1.35, height: nodeSize * 1.35)
+                                    .glassEffect(.clear, in: .circle)
+                                    .position(points[local])
+                            }
+                        }
+                    }
+                    .allowsHitTesting(false)
+                }
                 ForEach(Array(windowIndices.enumerated()), id: \.element) { local, nodeIndex in
                     // Figure sits on the line: tilt it to the strand's slope
                     // under the perch. The tangent always points down-page,
