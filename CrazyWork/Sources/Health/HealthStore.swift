@@ -57,6 +57,31 @@ final class HealthStore {
         try await builder.finishWorkout()
     }
 
+    struct HeartRateSample: Equatable {
+        let date: Date
+        let bpm: Double
+    }
+
+    /// All heart-rate samples inside the interval, oldest first. Empty when
+    /// unavailable/denied — callers hide their chart, never error.
+    func heartRateSeries(start: Date, end: Date) async -> [HeartRateSample] {
+        guard isAvailable else { return [] }
+        let type = HKQuantityType(.heartRate)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        return await withCheckedContinuation { (cont: CheckedContinuation<[HeartRateSample], Never>) in
+            let q = HKSampleQuery(sampleType: type, predicate: predicate,
+                                  limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, _ in
+                let series = (samples as? [HKQuantitySample])?.map {
+                    HeartRateSample(date: $0.startDate, bpm: $0.quantity.doubleValue(for: unit))
+                } ?? []
+                cont.resume(returning: series)
+            }
+            store.execute(q)
+        }
+    }
+
     /// Latest sample value for a quantity type, extracted to a Sendable Double
     /// inside the callback (no HKQuantity crosses actors).
     private func latestValue(_ id: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {

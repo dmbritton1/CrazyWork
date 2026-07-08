@@ -6,7 +6,11 @@ import ChallengeCore
 /// per-set breakdown. Shown full-screen when a session finishes.
 struct SummaryView: View {
     let results: [SessionCoordinator.SetResult]
+    /// Start of the live session, for the heart-rate query. Nil (previews,
+    /// future call sites without a live interval) hides the HR chart.
+    var workoutStart: Date? = nil
     @Environment(\.dismiss) private var dismiss
+    @State private var heartRate: [HealthStore.HeartRateSample] = []
 
     private struct Row: Identifiable {
         let id = UUID()
@@ -106,6 +110,18 @@ struct SummaryView: View {
                             }
                             .chartYScale(domain: 0...100)
                         }
+
+                        if heartRate.count >= 2 {
+                            ChartCard(title: "Heart rate", height: 180) {
+                                Chart(heartRate, id: \.date) { sample in
+                                    LineMark(x: .value("Time", sample.date),
+                                             y: .value("BPM", sample.bpm))
+                                        .interpolationMethod(.catmullRom)
+                                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                                        .foregroundStyle(Palette.brandRed)
+                                }
+                            }
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -142,6 +158,10 @@ struct SummaryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.canvas)
+        .task {
+            guard let workoutStart else { return }
+            heartRate = await HealthStore.shared.heartRateSeries(start: workoutStart, end: Date())
+        }
     }
 
     /// The headline moment: three big numerals for what the session produced.

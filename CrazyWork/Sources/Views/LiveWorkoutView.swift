@@ -16,6 +16,7 @@ struct LiveWorkoutView: View {
     @State private var latestImageSize: CGSize = .zero
     @State private var cameraDenied = false
     @State private var saved = false
+    @State private var workoutStart = Date()
     @State private var audioPlayer = WorkoutAudioPlayer()
     @State private var watchMirror = WatchWorkoutMirror()
     @State private var watchRelay = WatchEventRelay()
@@ -35,7 +36,7 @@ struct LiveWorkoutView: View {
             Color.black.ignoresSafeArea()
 
             if coordinator.phase == .finished {
-                SummaryView(results: coordinator.results)
+                SummaryView(results: coordinator.results, workoutStart: workoutStart)
             } else {
                 if cameraDenied {
                     deniedView
@@ -194,6 +195,7 @@ struct LiveWorkoutView: View {
     // MARK: - Lifecycle
 
     private func run() async {
+        workoutStart = Date()
         coordinator.start()
         // Watch session writes HR samples and workouts to Health, so the
         // health-sync opt-out gates it, same as the phone's save path.
@@ -223,7 +225,7 @@ struct LiveWorkoutView: View {
     private func saveIfNeeded() {
         guard !saved else { return }
         saved = true
-        let session = WorkoutSession(startedAt: Date())
+        let session = WorkoutSession(startedAt: workoutStart) // real start: sessions had ~0 duration before
         for (i, r) in coordinator.results.enumerated() {
             let set = ExerciseSet(exerciseID: r.exerciseID, goalUnit: r.goalUnit.rawValue,
                                   target: r.target, order: i)
