@@ -4,10 +4,11 @@ using namespace metal;
 // Gravitational lens for the trail. Within `radius` of a node, sample
 // positions are pulled toward the center (magnification: strands appear
 // pushed outward around the figure) and rotated around it (frame-dragging:
-// strands near the mass get swept into arcs). Quadratic falloff melts both
-// to nothing well before any visible edge, so it reads as an aura, not a
-// disc. At the very center everything samples the same point, clearing a
-// calm void right under the glyph.
+// strands near the mass get swept into arcs). With strength > 1 the inner
+// zone inverts — strands ghost into mirrored arcs on the far side, the
+// Einstein-ring signature that makes lensing legible in a still frame.
+// Quadratic falloff melts everything to nothing well before any visible
+// edge, so it reads as an aura, not a disc.
 [[ stitchable ]] float2 trailLens(float2 position,
                                   device const float *centers, int count,
                                   float radius, float strength, float swirl) {
