@@ -1,8 +1,11 @@
 # Apple Watch Integration — Design
 
 **Date:** 2026-07-04 (amended 2026-07-07: phases 1–2 shipped; added settings
-toggle, wrist remote control as phase 6)
-**Status:** Approved approach (A: workout session mirroring), phased delivery
+toggle, wrist remote control as phase 6; phases 3–6 implemented 2026-07-08)
+**Status:** Approved approach (A: workout session mirroring), phased delivery.
+Phases 1–6 implemented and unit/build-verified; interactive paired-simulator
+verification (live workout flow, haptics, HR sync) pending on hardware/manual
+run — HealthKit-prompt-gated steps are not scriptable.
 
 ## Goal
 
