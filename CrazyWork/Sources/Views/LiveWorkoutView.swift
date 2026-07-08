@@ -18,6 +18,7 @@ struct LiveWorkoutView: View {
     @State private var saved = false
     @State private var audioPlayer = WorkoutAudioPlayer()
     @State private var watchMirror = WatchWorkoutMirror()
+    @State private var watchRelay = WatchEventRelay()
     @AppStorage("workoutAudioEnabled") private var audioEnabled = true
     @AppStorage("healthSyncEnabled") private var healthSyncEnabled = false
     @AppStorage("watchWorkoutEnabled") private var watchWorkoutEnabled = true
@@ -52,7 +53,7 @@ struct LiveWorkoutView: View {
                     case .resting:
                         Spacer()
                         RestCountdownView(seconds: restSeconds, nextExercise: exerciseName) {
-                            coordinator.beginNextSet()
+                            advanceFromRest()
                         }
                         .id(coordinator.currentSetIndex)
                         Spacer()
@@ -158,6 +159,38 @@ struct LiveWorkoutView: View {
         return ExerciseRegistry.displayName(for: id)
     }
 
+    /// The workout state as the watch should render it right now.
+    private var currentSnapshot: WatchEventRelay.Snapshot {
+        let phase: SessionPhaseMessage = switch coordinator.phase {
+        case .resting: .resting
+        case .finished: .finished
+        case .idle, .active: .active
+        }
+        return WatchEventRelay.Snapshot(exerciseName: exerciseName,
+                                        value: Int(coordinator.currentProgress),
+                                        target: coordinator.currentTarget,
+                                        setIndex: coordinator.currentSetIndex,
+                                        setCount: plan.count,
+                                        phase: phase)
+    }
+
+    /// Fans one coordinator event out to every consumer (audio + watch).
+    private func forward(_ event: WorkoutEvent) {
+        audioPlayer.handle(event)
+        for message in watchRelay.messages(for: event, snapshot: currentSnapshot) {
+            watchMirror.send(message)
+        }
+    }
+
+    /// Ends rest (timer, phone button, or watch button — idempotent via the
+    /// coordinator's phase guard) and tells the wrist.
+    private func advanceFromRest() {
+        guard coordinator.phase == .resting else { return }
+        coordinator.beginNextSet()
+        watchMirror.send(.haptic(.restOver))
+        watchMirror.send(watchRelay.progressMessage(for: currentSnapshot))
+    }
+
     // MARK: - Lifecycle
 
     private func run() async {
@@ -180,7 +213,7 @@ struct LiveWorkoutView: View {
         for await sample in pipeline.frames {
             latestFrame = sample.frame
             latestImageSize = sample.imageSize
-            for event in coordinator.feed(sample.frame) { audioPlayer.handle(event) }
+            for event in coordinator.feed(sample.frame) { forward(event) }
             if coordinator.phase == .finished { break }
         }
         pipeline.stop() // camera off once the workout completes
