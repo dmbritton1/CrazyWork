@@ -140,7 +140,7 @@ struct GalaxyBackground: View {
                     Circle()
                         .fill(RadialGradient(
                             colors: [Palette.accentRedInk.opacity(
-                                0.30 * nebulaDim * (1 + 0.12 * sin(t / 9 * 2 * .pi))), .clear],
+                                0.40 * nebulaDim * (1 + 0.12 * sin(t / 9 * 2 * .pi))), .clear],
                             center: .center, startRadius: 0, endRadius: 330))
                         .frame(width: 660, height: 660)
                         .scaleEffect(1 + 0.08 * sin(t / 12 * 2 * .pi))
@@ -149,7 +149,7 @@ struct GalaxyBackground: View {
                     Circle()
                         .fill(RadialGradient(
                             colors: [Palette.accentTealInk.opacity(
-                                0.25 * nebulaDim * (1 + 0.12 * sin(t / 9 * 2 * .pi + 2.1))), .clear],
+                                0.34 * nebulaDim * (1 + 0.12 * sin(t / 9 * 2 * .pi + 2.1))), .clear],
                             center: .center, startRadius: 0, endRadius: 300))
                         .frame(width: 600, height: 600)
                         .scaleEffect(1 + 0.08 * sin(t / 12 * 2 * .pi + 3.7))
