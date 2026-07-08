@@ -214,10 +214,10 @@ struct PathView: View {
                 .distortionEffect(
                     ShaderLibrary.trailLens(
                         .floatArray(points.flatMap { [Float($0.x), Float($0.y)] }),
-                        .float(Float(nodeSize) * 1.7),
+                        .float(Float(nodeSize) * 2.1),
                         .float(1.3),
                         .float(0.8)),
-                    maxSampleOffset: CGSize(width: 36, height: 36))
+                    maxSampleOffset: CGSize(width: 44, height: 44))
                 // Inertia from scroll velocity: the ribbon lags a touch and
                 // its amplitude tenses, then springs back. Nodes stay put.
                 .offset(y: stretch * -14)
