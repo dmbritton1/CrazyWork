@@ -20,6 +20,7 @@ struct LiveWorkoutView: View {
     @State private var watchMirror = WatchWorkoutMirror()
     @AppStorage("workoutAudioEnabled") private var audioEnabled = true
     @AppStorage("healthSyncEnabled") private var healthSyncEnabled = false
+    @AppStorage("watchWorkoutEnabled") private var watchWorkoutEnabled = true
 
     init(plan: [PlannedSet], restSeconds: Int, onComplete: (() -> Void)? = nil) {
         self.plan = plan
@@ -163,7 +164,7 @@ struct LiveWorkoutView: View {
         coordinator.start()
         // Watch session writes HR samples and workouts to Health, so the
         // health-sync opt-out gates it, same as the phone's save path.
-        if healthSyncEnabled {
+        if healthSyncEnabled && watchWorkoutEnabled {
             Task { await watchMirror.start() } // best-effort; no watch = no-op
         }
         audioPlayer.muted = !audioEnabled

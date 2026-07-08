@@ -36,6 +36,7 @@ struct ProfileView: View {
     @AppStorage("skeletonShowSkeleton") private var skeletonShowSkeleton = true
     @AppStorage("voiceID") private var voiceID = ""
     @AppStorage("healthSyncEnabled") private var healthSyncEnabled = false
+    @AppStorage("watchWorkoutEnabled") private var watchWorkoutEnabled = true
     @Query private var sessions: [WorkoutSession]
     @State private var previewSynth = AVSpeechSynthesizer()
     @State private var speechEnder = SpeechSessionEnder()
@@ -157,6 +158,11 @@ struct ProfileView: View {
                 .onChange(of: healthSyncEnabled) { _, isOn in
                     if isOn { Task { try? await HealthStore.shared.requestAuthorization() } }
                 }
+            Toggle("Use Apple Watch during workouts", isOn: $watchWorkoutEnabled)
+                .typography(Typography.bodyMd).foregroundStyle(Palette.ink)
+                .disabled(!healthSyncEnabled)
+            Text("Launches the watch app for live heart rate, measured calories, and Activity-ring credit.")
+                .typography(Typography.captionSm).foregroundStyle(Palette.mute)
         }
         .card()
     }
