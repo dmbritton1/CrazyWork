@@ -143,8 +143,10 @@ Each phase is independently shippable and demo-able in the simulator.
    exercise, rep/hold count vs target, set x of y, rest countdown. *Done
    when: the watch mirrors the phone's live state within ~1s.*
 5. **HR analysis** — post-workout HealthKit query for HR samples in the
-   workout interval; per-set HR curve in `SummaryView` (existing `ChartCard`
-   component), effort/recovery trends in `StatsView`. Works for any workout
+   workout interval; HR curve for the workout in `SummaryView` (existing
+   `ChartCard` component; whole-workout, not per-set — `SetResult` records no
+   timestamps and set segmentation isn't worth adding them), average-HR
+   effort trend in `StatsView`. Works for any workout
    with HR data regardless of phases 1–4. *Done when: a summary shows an HR
    chart for a workout that has samples and hides it for one that doesn't.*
 6. **Wrist remote control** — users stand ~6 ft from the phone so the camera
