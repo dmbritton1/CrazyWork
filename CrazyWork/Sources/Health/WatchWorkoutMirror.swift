@@ -23,6 +23,7 @@ final class WatchWorkoutMirror: NSObject {
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
     private var endAcknowledgement: CheckedContinuation<Void, Never>?
+    private var endTask: Task<Bool, Never>?
 
     func start() async {
         guard state == .idle, HKHealthStore.isHealthDataAvailable() else {
@@ -51,19 +52,32 @@ final class WatchWorkoutMirror: NSObject {
 
     /// Ask the watch to finish. Returns true if it acknowledged with `.ended`
     /// within 5 seconds (then `watchEndedEnergyKcal` holds measured energy).
+    /// Re-entrant-safe: the natural-finish path and `.onDisappear` both call
+    /// this, so concurrent callers share one in-flight end and one result —
+    /// the watch is told to finish once, and no caller's `await` is orphaned
+    /// (a naive re-entry guard would return a false ack to the save path and
+    /// double-write the workout to HealthKit).
     func end() async -> Bool {
+        if let endTask { return await endTask.value }
         guard state == .mirroring else { return false }
-        send(.end)
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            endAcknowledgement = cont
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(5))
-                self?.resumeEndAcknowledgement()
+        let task = Task { @MainActor [weak self] () -> Bool in
+            guard let self else { return false }
+            self.send(.end)
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                self.endAcknowledgement = cont
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(5))
+                    self?.resumeEndAcknowledgement()
+                }
             }
+            self.state = .idle
+            self.session = nil
+            return self.watchEndedEnergyKcal != nil
         }
-        state = .idle
-        session = nil
-        return watchEndedEnergyKcal != nil
+        endTask = task
+        let result = await task.value
+        endTask = nil
+        return result
     }
 
     private func adopt(_ session: HKWorkoutSession) {
