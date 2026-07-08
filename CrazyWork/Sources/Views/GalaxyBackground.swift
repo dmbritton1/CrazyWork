@@ -128,7 +128,8 @@ struct GalaxyBackground: View {
 
     /// Two vast color washes at infinite distance — warm maroon high left,
     /// the page's single teal counterpoint low right. They breathe on
-    /// offset cycles (scale ±8%, opacity ±20%), sway a few points, and
+    /// offset cycles (scale ±8%, opacity ±12% over a vibrant floor), sway
+    /// a few points, and
     /// drift with scroll slower than the farthest stars, so they read as
     /// alive but infinitely far. 8 fps is plenty for 10-second cycles.
     private var nebula: some View {
@@ -139,7 +140,7 @@ struct GalaxyBackground: View {
                     Circle()
                         .fill(RadialGradient(
                             colors: [Palette.accentRedInk.opacity(
-                                0.22 * nebulaDim * (1 + 0.20 * sin(t / 9 * 2 * .pi))), .clear],
+                                0.30 * nebulaDim * (1 + 0.12 * sin(t / 9 * 2 * .pi))), .clear],
                             center: .center, startRadius: 0, endRadius: 330))
                         .frame(width: 660, height: 660)
                         .scaleEffect(1 + 0.08 * sin(t / 12 * 2 * .pi))
@@ -148,7 +149,7 @@ struct GalaxyBackground: View {
                     Circle()
                         .fill(RadialGradient(
                             colors: [Palette.accentTealInk.opacity(
-                                0.18 * nebulaDim * (1 + 0.20 * sin(t / 9 * 2 * .pi + 2.1))), .clear],
+                                0.25 * nebulaDim * (1 + 0.12 * sin(t / 9 * 2 * .pi + 2.1))), .clear],
                             center: .center, startRadius: 0, endRadius: 300))
                         .frame(width: 600, height: 600)
                         .scaleEffect(1 + 0.08 * sin(t / 12 * 2 * .pi + 3.7))
