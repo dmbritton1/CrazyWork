@@ -58,6 +58,19 @@ final class SessionCoordinator {
         phase = .active
     }
 
+    /// Ends the workout now (early exit from the wrist or UI): the in-progress
+    /// set is recorded as a partial result; a rest-phase exit keeps only the
+    /// sets already finished. Returns events under the same contract as
+    /// `feed(_:)` — the caller forwards them to its consumers. No-op unless
+    /// active or resting.
+    @discardableResult
+    func finishEarly() -> [WorkoutEvent] {
+        guard phase == .active || phase == .resting else { return [] }
+        if phase == .active { recordCurrentSetResult() }
+        phase = .finished
+        return [.finished]
+    }
+
     @discardableResult
     func feed(_ frame: PoseFrame) -> [WorkoutEvent] {
         pendingEvents = []
@@ -107,17 +120,7 @@ final class SessionCoordinator {
     }
 
     private func finishCurrentSet() {
-        let set = plan[currentSetIndex]
-        let score = visibleFrames > 0 ? max(0, 1 - Double(cuedFrames) / Double(visibleFrames)) : 1
-        results.append(SetResult(
-            exerciseID: set.exerciseID,
-            goalUnit: goalUnit,
-            target: set.target,
-            completed: currentProgress,
-            averageFormScore: score,
-            findingsSummary: cueCounts
-        ))
-
+        recordCurrentSetResult()
         pendingEvents.append(.setCompleted(index: currentSetIndex, total: plan.count))
 
         if currentSetIndex + 1 < plan.count {
@@ -129,5 +132,19 @@ final class SessionCoordinator {
             phase = .finished
             pendingEvents.append(.finished)
         }
+    }
+
+    /// Appends a SetResult for the current set as it stands right now.
+    private func recordCurrentSetResult() {
+        let set = plan[currentSetIndex]
+        let score = visibleFrames > 0 ? max(0, 1 - Double(cuedFrames) / Double(visibleFrames)) : 1
+        results.append(SetResult(
+            exerciseID: set.exerciseID,
+            goalUnit: goalUnit,
+            target: set.target,
+            completed: currentProgress,
+            averageFormScore: score,
+            findingsSummary: cueCounts
+        ))
     }
 }

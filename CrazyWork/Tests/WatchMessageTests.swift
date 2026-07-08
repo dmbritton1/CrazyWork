@@ -11,6 +11,8 @@ struct WatchMessageTests {
             .haptic(.setComplete),
             .end,
             .ended(activeEnergyKcal: 87.0),
+            .control(.skipRest),
+            .control(.endWorkout),
         ]
         for message in messages {
             let decoded = try WatchMessage.decode(try message.encoded())

@@ -71,4 +71,44 @@ final class SessionCoordinatorTests: XCTestCase {
         for f in SquatFrames.reps(1) { events += coord.feed(f) }
         XCTAssertTrue(events.contains(.rest(nextExerciseName: "Lunge")))
     }
+
+    func testFinishEarlyRecordsPartialActiveSet() {
+        let coord = SessionCoordinator(plan: [PlannedSet(exerciseID: "squat", target: 2)])
+        coord.start()
+        for f in SquatFrames.reps(1) { coord.feed(f) } // 1 of 2 reps: still active
+
+        let events = coord.finishEarly()
+
+        XCTAssertEqual(coord.phase, .finished)
+        XCTAssertEqual(events, [.finished])
+        XCTAssertEqual(coord.results.count, 1)
+        XCTAssertEqual(coord.results.first?.completed, 1)
+        XCTAssertEqual(coord.results.first?.target, 2)
+    }
+
+    func testFinishEarlyDuringRestKeepsOnlyCompletedSets() {
+        let plan = [PlannedSet(exerciseID: "squat", target: 1),
+                    PlannedSet(exerciseID: "squat", target: 1)]
+        let coord = SessionCoordinator(plan: plan)
+        coord.start()
+        for f in SquatFrames.reps(1) { coord.feed(f) } // set 1 done → resting
+
+        let events = coord.finishEarly()
+
+        XCTAssertEqual(coord.phase, .finished)
+        XCTAssertEqual(events, [.finished])
+        XCTAssertEqual(coord.results.count, 1) // no phantom result for the unstarted set
+    }
+
+    func testFinishEarlyWhenAlreadyFinishedIsNoOp() {
+        let coord = SessionCoordinator(plan: [PlannedSet(exerciseID: "squat", target: 1)])
+        coord.start()
+        for f in SquatFrames.reps(1) { coord.feed(f) } // finished
+        XCTAssertEqual(coord.phase, .finished)
+
+        let events = coord.finishEarly()
+
+        XCTAssertTrue(events.isEmpty)
+        XCTAssertEqual(coord.results.count, 1)
+    }
 }

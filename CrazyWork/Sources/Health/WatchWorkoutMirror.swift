@@ -82,8 +82,8 @@ final class WatchWorkoutMirror: NSObject {
         case let .ended(activeEnergyKcal):
             watchEndedEnergyKcal = activeEnergyKcal
             resumeEndAcknowledgement()
-        case .progress, .haptic, .end:
-            break // phone → watch messages; ignore if echoed back
+        case .progress, .haptic, .end, .control:
+            break // phone → watch / watch → phone messages; ignore if echoed back
         }
     }
 }

@@ -154,7 +154,7 @@ extension WatchSessionController: HKWorkoutSessionDelegate {
                     self.progress = WorkoutProgress(exerciseName: exerciseName, value: value,
                                                     target: target, setIndex: setIndex,
                                                     setCount: setCount, phase: phase)
-                case .metrics, .ended:
+                case .metrics, .ended, .control:
                     break // watch → phone traffic; ignore if echoed back
                 }
             }

@@ -10,6 +10,11 @@ enum HapticCue: String, Codable, Sendable {
     case countdown, setComplete, restOver, workoutComplete
 }
 
+/// Commands the wrist can issue against the running phone workout (phase 6).
+enum WatchControl: String, Codable, Sendable {
+    case skipRest, endWorkout
+}
+
 /// Everything that crosses the mirrored workout session's data channel,
 /// in both directions. JSON-encoded; compiled into both app targets.
 enum WatchMessage: Codable, Equatable, Sendable {
@@ -20,6 +25,8 @@ enum WatchMessage: Codable, Equatable, Sendable {
                   setIndex: Int, setCount: Int, phase: SessionPhaseMessage)
     /// Phone → watch: play a haptic.
     case haptic(HapticCue)
+    /// Watch → phone: user tapped a control on the wrist.
+    case control(WatchControl)
     /// Phone → watch: finish the session.
     case end
     /// Watch → phone: session finished and saved with this measured energy.
